@@ -1,2 +1,2 @@
 # Data
-졸업작품
+# matlab data
