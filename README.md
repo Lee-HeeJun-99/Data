@@ -9,3 +9,4 @@
 ##### train_B는 Temporal Attention 추가하여 시간 확인
 ##### train_C는 최종
 ##### C 옵션 예시 : python train_C_final.py --npz .\train_seed0.npz --outdir .\C_seed0 , seed 별로 실행
+##### summarize_C.py는 C 결과 평균±표준편차로 최종 요약 테이블
