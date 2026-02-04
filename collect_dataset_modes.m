@@ -44,7 +44,8 @@ dataset.meta.createdAt  = char(datetime("now"));
 dataset.runs = [];
 
 %% ===== MODE 0~3 실행 =====
-modeOrder = [0 1 2 3];
+numRunsPerMode = 10;
+modeOrder = repelem([0 1 2 3], numRunsPerMode);
 
 for k = 1:numel(modeOrder)
     m = modeOrder(k);
@@ -57,7 +58,7 @@ for k = 1:numel(modeOrder)
     set_param(modeBlk, "Value", num2str(m));
 
     % 랜덤 시드 고정(재현성)
-    rng(baseSeed + m, "twister");
+    rng(baseSeed + 100*m + k, "twister");
 
     % 시뮬레이션 실행
     simOut = sim(modelName, ...
