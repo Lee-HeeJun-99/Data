@@ -115,10 +115,11 @@ for ep in range(1, EPOCHS+1):
 _, test_acc, y_true, y_pred = run_epoch(model, test_loader)
 print(f"\n[Test Accuracy] {test_acc:.3f}\n")
 
-print("[Classification Report]")
 print(classification_report(
     y_true, y_pred,
-    target_names=["normal","loose","arc","overcurrent"]
+    labels=[0,1,2,3],
+    target_names=["normal","loose","arc","overcurrent"],
+    zero_division=0
 ))
 
 cm = confusion_matrix(y_true, y_pred)
