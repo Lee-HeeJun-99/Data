@@ -110,7 +110,7 @@ save(saveMatName, "dataset", "-v7.3");
 fprintf("\n[SAVED] %s\n", saveMatName);
 
 %% ===== 간단 확인 플롯 =====
-quickPlotAllModes(dataset);
+% quickPlotAllModes(dataset);
 
 %% ===== 정리 =====
 try
@@ -159,17 +159,24 @@ function ts = toTS(x, t)
 end
 
 function quickPlotAllModes(dataset)
-    figure("Name", "All MODE Quick Check");
+    figure("Name", "MODE Quick Check");
     tiledlayout(4,1);
 
-    for k = 1:numel(dataset.runs)
-        r = dataset.runs(k);
+    modes = unique([dataset.runs.mode], "stable");
+
+    for i = 1:numel(modes)
+        m = modes(i);
+        % 해당 MODE 중 첫 run만 사용
+        idx = find([dataset.runs.mode] == m, 1);
+        r = dataset.runs(idx);
+
         nexttile;
         plot(r.signals.I.Time, r.signals.I.Data); hold on;
         plot(r.signals.HF.Time, r.signals.HF.Data);
         plot(r.signals.T.Time, r.signals.T.Data);
         hold off;
-        title(sprintf("MODE=%d (%s): I, HF, T", r.mode, r.label));
+
+        title(sprintf("MODE=%d (%s)", r.mode, r.label));
         xlabel("Time (s)");
         legend("I","HF","T");
     end
