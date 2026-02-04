@@ -83,22 +83,37 @@ def plot_curves(hist, outdir):
     plt.savefig(os.path.join(outdir,"acc_curve.png"), dpi=200); plt.close()
 
 def plot_cm(cm, names, outpath, normalize=False, title="Confusion Matrix"):
-    cm_disp = cm.astype(np.float32)
     if normalize:
-        cm_disp = cm_disp / (cm_disp.sum(axis=1, keepdims=True)+1e-8)
+        cm_disp = cm.astype(np.float32)
+        cm_disp = cm_disp / (cm_disp.sum(axis=1, keepdims=True) + 1e-8)
+        fmt = ".2f"
+    else:
+        cm_disp = cm.astype(np.int64)
+        fmt = "d"
+
     plt.figure()
     plt.imshow(cm_disp, interpolation="nearest")
-    plt.title(title); plt.colorbar()
-    ticks=np.arange(len(names))
-    plt.xticks(ticks, names, rotation=30, ha="right"); plt.yticks(ticks, names)
-    fmt=".2f" if normalize else "d"
-    thr=cm_disp.max()*0.6
-    for i in range(4):
-        for j in range(4):
-            plt.text(j,i,format(cm_disp[i,j],fmt),ha="center",va="center",
-                     color="white" if cm_disp[i,j]>thr else "black")
-    plt.ylabel("True"); plt.xlabel("Pred"); plt.tight_layout()
-    plt.savefig(outpath, dpi=200); plt.close()
+    plt.title(title)
+    plt.colorbar()
+
+    ticks = np.arange(len(names))
+    plt.xticks(ticks, names, rotation=30, ha="right")
+    plt.yticks(ticks, names)
+
+    thresh = cm_disp.max() * 0.6
+    for i in range(cm_disp.shape[0]):
+        for j in range(cm_disp.shape[1]):
+            plt.text(
+                j, i, format(cm_disp[i, j], fmt),
+                ha="center", va="center",
+                color="white" if cm_disp[i, j] > thresh else "black"
+            )
+
+    plt.ylabel("True")
+    plt.xlabel("Pred")
+    plt.tight_layout()
+    plt.savefig(outpath, dpi=200)
+    plt.close()
 
 def main():
     ap = argparse.ArgumentParser()
