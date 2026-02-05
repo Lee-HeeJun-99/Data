@@ -34,7 +34,7 @@ class GRU_GAP(nn.Module):
 
 
 # ---------
-# B) GRU + Attention (제안)
+# B) GRU + Attention
 # ---------
 class GRU_Attn(nn.Module):
     def __init__(self, input_dim=3, hidden_dim=128, num_classes=4):
