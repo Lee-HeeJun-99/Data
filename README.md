@@ -12,3 +12,4 @@
 ##### summarize_C.py는 C 결과 평균±표준편차로 최종 요약 테이블
 ##### models_ablation.py 1. GRU + GAP, 2. GRU + Attention, 3. LSTM + Attention
 ##### train_ablation.py 실행 예시 : python train_ablation.py --npz .\train_seed0.npz --model gru_gap  --outdir .\A_gru_gap 모델 이름 바꿔서 비교
+##### 2Stage : python infer_2stage_multiclass.py --npz .\train_seed0.npz --ckpt_stage1 .\LSTM_ATTN_seed0\best_model.pt --ckpt_stage2 .\C_seed0\best_model.pt --win_len 256 --stride 64 --theta1 "0.0,0.70,0.60,0.70" --theta2 "0.0,0.90,0.85,0.95" --N 8 --M 3 --seconds 60 --log_csv .\logs\stream_2stage_log.csv
