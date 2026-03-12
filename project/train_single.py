@@ -1,0 +1,407 @@
+import os
+import json
+import random
+import argparse
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix
+)
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+
+from datasets import SeqDataset
+from models import GRUClassifier, LSTMClassifier, GRUAttentionClassifier
+
+
+# =========================================================
+# Utility
+# =========================================================
+def set_seed(seed: int = 42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    # 재현성 강화
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def ensure_dir(path: str):
+    os.makedirs(path, exist_ok=True)
+
+
+def load_seq_data(data_root: str):
+    X_seq_train = np.load(os.path.join(data_root, "X_seq_train.npy"))
+    X_seq_val = np.load(os.path.join(data_root, "X_seq_val.npy"))
+    X_seq_test = np.load(os.path.join(data_root, "X_seq_test.npy"))
+
+    y_train = np.load(os.path.join(data_root, "y_train.npy"))
+    y_val = np.load(os.path.join(data_root, "y_val.npy"))
+    y_test = np.load(os.path.join(data_root, "y_test.npy"))
+
+    return X_seq_train, X_seq_val, X_seq_test, y_train, y_val, y_test
+
+
+def build_model(model_name: str, input_dim: int, hidden_dim: int, num_layers: int, num_classes: int, dropout: float):
+    model_name = model_name.lower()
+
+    if model_name == "gru":
+        model = GRUClassifier(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            num_classes=num_classes,
+            dropout=dropout
+        )
+    elif model_name == "lstm":
+        model = LSTMClassifier(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            num_classes=num_classes,
+            dropout=dropout
+        )
+    elif model_name == "gru_attn":
+        model = GRUAttentionClassifier(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            num_classes=num_classes,
+            dropout=dropout
+        )
+    else:
+        raise ValueError(f"지원하지 않는 모델입니다: {model_name}")
+
+    return model
+
+
+def get_logits_from_model_output(output):
+    """
+    GRU/LSTM: logits
+    GRU+Attention: (logits, alpha)
+    """
+    if isinstance(output, tuple):
+        logits = output[0]
+    else:
+        logits = output
+    return logits
+
+
+# =========================================================
+# Train / Eval
+# =========================================================
+def train_one_epoch(model, loader, criterion, optimizer, device):
+    model.train()
+
+    total_loss = 0.0
+    all_preds = []
+    all_targets = []
+
+    for x_seq, y in loader:
+        x_seq = x_seq.to(device)
+        y = y.to(device)
+
+        optimizer.zero_grad()
+
+        output = model(x_seq)
+        logits = get_logits_from_model_output(output)
+
+        loss = criterion(logits, y)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item() * x_seq.size(0)
+
+        preds = torch.argmax(logits, dim=1)
+        all_preds.append(preds.detach().cpu().numpy())
+        all_targets.append(y.detach().cpu().numpy())
+
+    avg_loss = total_loss / len(loader.dataset)
+    all_preds = np.concatenate(all_preds)
+    all_targets = np.concatenate(all_targets)
+    acc = accuracy_score(all_targets, all_preds)
+
+    return avg_loss, acc
+
+
+@torch.no_grad()
+def eval_one_epoch(model, loader, criterion, device):
+    model.eval()
+
+    total_loss = 0.0
+    all_preds = []
+    all_targets = []
+
+    for x_seq, y in loader:
+        x_seq = x_seq.to(device)
+        y = y.to(device)
+
+        output = model(x_seq)
+        logits = get_logits_from_model_output(output)
+
+        loss = criterion(logits, y)
+        total_loss += loss.item() * x_seq.size(0)
+
+        preds = torch.argmax(logits, dim=1)
+        all_preds.append(preds.detach().cpu().numpy())
+        all_targets.append(y.detach().cpu().numpy())
+
+    avg_loss = total_loss / len(loader.dataset)
+    all_preds = np.concatenate(all_preds)
+    all_targets = np.concatenate(all_targets)
+    acc = accuracy_score(all_targets, all_preds)
+
+    return avg_loss, acc, all_targets, all_preds
+
+
+# =========================================================
+# Visualization / Save
+# =========================================================
+def save_learning_curve(history, save_path):
+    epochs = range(1, len(history["train_loss"]) + 1)
+
+    plt.figure(figsize=(10, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, history["train_loss"], label="train_loss")
+    plt.plot(epochs, history["val_loss"], label="val_loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss Curve")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, history["train_acc"], label="train_acc")
+    plt.plot(epochs, history["val_acc"], label="val_acc")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.title("Accuracy Curve")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=200, bbox_inches="tight")
+    plt.close()
+
+
+def save_confusion_matrix_heatmap(cm, class_names, save_path):
+    plt.figure(figsize=(6, 5))
+    plt.imshow(cm, interpolation="nearest")
+    plt.title("Confusion Matrix")
+    plt.colorbar()
+
+    tick_marks = np.arange(len(class_names))
+    plt.xticks(tick_marks, class_names, rotation=45)
+    plt.yticks(tick_marks, class_names)
+
+    thresh = cm.max() / 2.0 if cm.max() > 0 else 0.5
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(
+                j, i, str(cm[i, j]),
+                horizontalalignment="center",
+                color="white" if cm[i, j] > thresh else "black"
+            )
+
+    plt.ylabel("True Label")
+    plt.xlabel("Predicted Label")
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=200, bbox_inches="tight")
+    plt.close()
+
+
+def save_classification_report_text(y_true, y_pred, class_names, save_path):
+    report = classification_report(
+        y_true,
+        y_pred,
+        target_names=class_names,
+        digits=4,
+        zero_division=0
+    )
+    with open(save_path, "w", encoding="utf-8") as f:
+        f.write(report)
+
+
+def save_metrics_json(metrics, save_path):
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, ensure_ascii=False, indent=2)
+
+
+# =========================================================
+# Main
+# =========================================================
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--data_root", type=str, required=True,
+                        help="예: ./prepared_dataset_multi/win_128")
+    parser.add_argument("--save_root", type=str, default="./results/single",
+                        help="결과 저장 루트")
+    parser.add_argument("--model", type=str, default="gru",
+                        choices=["gru", "lstm", "gru_attn"])
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--hidden_dim", type=int, default=64)
+    parser.add_argument("--num_layers", type=int, default=2)
+    parser.add_argument("--dropout", type=float, default=0.0)
+    parser.add_argument("--num_classes", type=int, default=4)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--num_workers", type=int, default=0)
+
+    args = parser.parse_args()
+
+    set_seed(args.seed)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[INFO] device: {device}")
+
+    # -----------------------------
+    # data load
+    # -----------------------------
+    X_seq_train, X_seq_val, X_seq_test, y_train, y_val, y_test = load_seq_data(args.data_root)
+
+    print(f"[INFO] X_seq_train: {X_seq_train.shape}, y_train: {y_train.shape}")
+    print(f"[INFO] X_seq_val  : {X_seq_val.shape}, y_val  : {y_val.shape}")
+    print(f"[INFO] X_seq_test : {X_seq_test.shape}, y_test : {y_test.shape}")
+
+    input_dim = X_seq_train.shape[-1]
+
+    train_dataset = SeqDataset(X_seq_train, y_train)
+    val_dataset = SeqDataset(X_seq_val, y_val)
+    test_dataset = SeqDataset(X_seq_test, y_test)
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers
+    )
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers
+    )
+
+    # -----------------------------
+    # save dir
+    # -----------------------------
+    data_name = os.path.basename(os.path.normpath(args.data_root))
+    exp_name = f"{args.model}_h{args.hidden_dim}_l{args.num_layers}"
+    save_dir = os.path.join(args.save_root, data_name, exp_name)
+    ensure_dir(save_dir)
+
+    # -----------------------------
+    # model
+    # -----------------------------
+    model = build_model(
+        model_name=args.model,
+        input_dim=input_dim,
+        hidden_dim=args.hidden_dim,
+        num_layers=args.num_layers,
+        num_classes=args.num_classes,
+        dropout=args.dropout
+    ).to(device)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
+    print(model)
+
+    # -----------------------------
+    # train
+    # -----------------------------
+    history = {
+        "train_loss": [],
+        "train_acc": [],
+        "val_loss": [],
+        "val_acc": [],
+    }
+
+    best_val_acc = -1.0
+    best_model_path = os.path.join(save_dir, "best_model.pt")
+
+    for epoch in range(1, args.epochs + 1):
+        train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
+        val_loss, val_acc, _, _ = eval_one_epoch(model, val_loader, criterion, device)
+
+        history["train_loss"].append(train_loss)
+        history["train_acc"].append(train_acc)
+        history["val_loss"].append(val_loss)
+        history["val_acc"].append(val_acc)
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), best_model_path)
+
+        print(
+            f"[Epoch {epoch:03d}/{args.epochs:03d}] "
+            f"train_loss={train_loss:.4f} | train_acc={train_acc:.4f} | "
+            f"val_loss={val_loss:.4f} | val_acc={val_acc:.4f}"
+        )
+
+    # -----------------------------
+    # best model load
+    # -----------------------------
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
+
+    test_loss, test_acc, y_true, y_pred = eval_one_epoch(model, test_loader, criterion, device)
+
+    print(f"[TEST] loss={test_loss:.4f}, acc={test_acc:.4f}")
+
+    # -----------------------------
+    # metrics / reports
+    # -----------------------------
+    class_names_default = ["normal", "loose", "arc", "overcurrent"]
+    if args.num_classes == 4:
+        class_names = class_names_default
+    else:
+        class_names = [f"class_{i}" for i in range(args.num_classes)]
+
+    cm = confusion_matrix(y_true, y_pred)
+
+    save_learning_curve(history, os.path.join(save_dir, "learning_curve.png"))
+    save_confusion_matrix_heatmap(cm, class_names, os.path.join(save_dir, "confusion_matrix.png"))
+    save_classification_report_text(
+        y_true, y_pred, class_names,
+        os.path.join(save_dir, "classification_report.txt")
+    )
+
+    metrics = {
+        "model": args.model,
+        "data_root": args.data_root,
+        "input_dim": int(input_dim),
+        "hidden_dim": int(args.hidden_dim),
+        "num_layers": int(args.num_layers),
+        "dropout": float(args.dropout),
+        "num_classes": int(args.num_classes),
+        "epochs": int(args.epochs),
+        "batch_size": int(args.batch_size),
+        "lr": float(args.lr),
+        "best_val_acc": float(best_val_acc),
+        "test_loss": float(test_loss),
+        "test_acc": float(test_acc),
+    }
+    save_metrics_json(metrics, os.path.join(save_dir, "metrics.json"))
+
+    print(f"[SAVE] results saved to: {save_dir}")
+
+
+if __name__ == "__main__":
+    main()
