@@ -1,183 +1,264 @@
-%% collect_dataset_modes.m
-% MODE 0~3 자동 시뮬레이션 + simOut에서 직접 신호 수집 + 저장
-% 현재 모델은 simOut에: HF_sig, I_sig, T_sig, V_sig, tout 로 저장
-
+%% collect_csv_modes.m
 clear; clc;
 
 %% ===== 사용자 설정 =====
-modelName   = "final_base_model";
-stopTime    = 1000;                   % 각 MODE 시뮬레이션 시간(초)
-saveFolder  = fullfile(pwd, "dataset_out");
-saveMatName = fullfile(saveFolder, "dataset_modes.mat");
+modelName = "main_model";
+stopTime = 1000;
+numRunsPerMode = 10;
+saveFolder = fullfile(pwd, "dataset_out");
 
-% 라벨
-modeLabel = containers.Map('KeyType','double','ValueType','char');
-modeLabel(0) = "normal";
-modeLabel(1) = "loose";
-modeLabel(2) = "arc";
-modeLabel(3) = "overcurrent";
+modeBlockNameHint = "mode";
 
-baseSeed = 1234;
-
-%% ===== 준비 =====
+%% ===== 저장 폴더 =====
 if ~exist(saveFolder, "dir")
     mkdir(saveFolder);
 end
 
+%% ===== 모델 로드 =====
 load_system(modelName);
 
-% MODE Constant 블록 찾기
-modeBlk = findModeBlock(modelName);
-fprintf("[INFO] MODE block: %s\n", modeBlk);
+%% ===== MODE 블록 찾기 =====
+modeBlk = findModeBlock(modelName, modeBlockNameHint);
+fprintf("[INFO] MODE block found: %s\n", modeBlk);
 
-% 반복 실행 가속(가능하면)
+%% ===== Fast Restart ====
 try
     set_param(modelName, "FastRestart", "on");
 catch
+    warning("[WARN] FastRestart를 켤 수 없습니다.");
 end
 
-%% ===== 데이터 구조 =====
-dataset = struct();
-dataset.meta.modelName  = modelName;
-dataset.meta.stopTime   = stopTime;
-dataset.meta.createdAt  = char(datetime("now"));
-dataset.runs = [];
+%% ===== 실행 =====
+modeList = [0 1 2 3];
 
-%% ===== MODE 0~3 실행 =====
-numRunsPerMode = 10;
-modeOrder = repelem([0 1 2 3], numRunsPerMode);
+for m = modeList
+    for runIdx = 1:numRunsPerMode
+        fprintf("\n=============================\n");
+        fprintf("[RUN] mode=%d, run=%d/%d\n", m, runIdx, numRunsPerMode);
+        fprintf("=============================\n");
 
-for k = 1:numel(modeOrder)
-    m = modeOrder(k);
+        % mode 설정
+        set_param(modeBlk, "Value", num2str(m));
 
-    fprintf("\n=============================\n");
-    fprintf("[RUN] MODE = %d (%s)\n", m, modeLabel(m));
-    fprintf("=============================\n");
+        % 재현성용 시드
+        rng(1000*m + runIdx, "twister");
 
-    % MODE 세팅
-    set_param(modeBlk, "Value", num2str(m));
+        % 시뮬레이션
+        simOut = sim(modelName, ...
+            "StopTime", num2str(stopTime), ...
+            "ReturnWorkspaceOutputs", "on");
 
-    % 랜덤 시드 고정(재현성)
-    rng(baseSeed + 100*m + k, "twister");
+        % 디버그
+        disp("[DEBUG] simOut contains:");
+        disp(simOut.who)
 
-    % 시뮬레이션 실행
-    simOut = sim(modelName, ...
-        "StopTime", num2str(stopTime), ...
-        "ReturnWorkspaceOutputs", "on");
+        % ===== 신호 읽기 =====
+        [I_data, HF_energy_data, HF_rms_data, T_data, t_data] = readSignals(simOut);
 
-    % ---- simOut에서 직접 꺼내기 (out 없음) ----
-    mustHave = {"V_sig","I_sig","HF_sig","T_sig","tout"};
-    names = simOut.who;
-    for i = 1:numel(mustHave)
-        if ~any(strcmp(names, mustHave{i}))
-            error("simOut에 '%s'가 없습니다. 현재 포함 변수: %s", ...
-                mustHave{i}, strjoin(names, ", "));
-        end
+        % 길이 맞추기
+        N = min([numel(I_data), numel(HF_energy_data), numel(HF_rms_data), numel(T_data), numel(t_data)]);
+        I_data         = I_data(1:N);
+        HF_energy_data = HF_energy_data(1:N);
+        HF_rms_data    = HF_rms_data(1:N);
+        T_data         = T_data(1:N);
+        t_data         = t_data(1:N);
+
+        % mode 열 (루프 변수 기준)
+        mode_col = m * ones(N,1);
+
+        % 최종 저장 데이터
+        % [I_meas, HF_energy, HF_rms, T_meas, mode]
+        data = [I_data, HF_energy_data, HF_rms_data, T_data, mode_col];
+
+        % CSV 저장
+        csvName = fullfile(saveFolder, sprintf("mode%d_run%02d.csv", m, runIdx));
+
+        header = {'I_meas','HF_energy','HF_rms','T_meas','mode'};
+        writecell(header, csvName);
+        writematrix(data, csvName, "WriteMode", "append");
+
+        fprintf("[SAVED] %s | size = [%d x %d]\n", csvName, size(data,1), size(data,2));
     end
-
-    V  = simOut.get("V_sig");
-    I  = simOut.get("I_sig");
-    HF = simOut.get("HF_sig");
-    T  = simOut.get("T_sig");
-    t  = simOut.get("tout");
-    % ------------------------------------------
-
-    % timeseries가 아니라면 timeseries로 변환(안전)
-    V  = toTS(V,  t);
-    I  = toTS(I,  t);
-    HF = toTS(HF, t);
-    T  = toTS(T,  t);
-
-    % run 저장
-    run = struct();
-    run.mode     = m;
-    run.label    = modeLabel(m);
-    run.seed     = baseSeed + m;
-    run.stopTime = stopTime;
-
-    run.signals = struct();
-    run.signals.t  = t;
-    run.signals.V  = V;
-    run.signals.I  = I;
-    run.signals.HF = HF;
-    run.signals.T  = T;
-
-    dataset.runs = [dataset.runs; run];
 end
 
-%% ===== 저장 =====
-save(saveMatName, "dataset", "-v7.3");
-fprintf("\n[SAVED] %s\n", saveMatName);
-
-%% ===== 간단 확인 플롯 =====
-% quickPlotAllModes(dataset);
-
-%% ===== 정리 =====
+%% ===== 종료 =====
 try
     set_param(modelName, "FastRestart", "off");
 catch
 end
 
-disp("완료되었습니다.");
+disp("모든 CSV 저장이 완료되었습니다.");
 
 %% ===== 로컬 함수 =====
-function modeBlk = findModeBlock(modelName)
-    blks = find_system(modelName, "SearchDepth", 3, "BlockType", "Constant", "Name", "MODE");
+function blk = findModeBlock(modelName, hint)
+    % 1순위: 이름이 MODE인 Constant 블록
+    blks = find_system(modelName, ...
+        "SearchDepth", 3, ...
+        "BlockType", "Constant", ...
+        "Name", "MODE");
+
     if ~isempty(blks)
-        modeBlk = blks{1};
+        blk = string(blks{1});
         return;
     end
-    cblks = find_system(modelName, "BlockType", "Constant");
+
+    % 2순위: 이름이 mode_cmd인 Constant 블록
+    blks = find_system(modelName, ...
+        "SearchDepth", 3, ...
+        "BlockType", "Constant", ...
+        "Name", "mode_cmd");
+
+    if ~isempty(blks)
+        blk = string(blks{1});
+        return;
+    end
+
+    % 3순위: 이름에 hint(mode)가 들어가는 Constant 블록
+    cblks = find_system(modelName, ...
+        "SearchDepth", 3, ...
+        "BlockType", "Constant");
+
     for i = 1:numel(cblks)
         nm = lower(string(get_param(cblks{i}, "Name")));
-        if contains(nm, "mode")
-            modeBlk = cblks{i};
+        if contains(nm, lower(hint))
+            blk = string(cblks{i});
             return;
         end
     end
-    error("MODE Constant 블록을 찾지 못했습니다. 블록 이름을 MODE로 해주세요.");
+
+    error("mode Constant 블록을 찾지 못했습니다. 이름을 확인하세요.");
 end
 
-function ts = toTS(x, t)
-    if isa(x, "timeseries")
-        ts = x;
-        return;
+function [I_data, HF_energy_data, HF_rms_data, T_data, t_data] = readSignals(simOut)
+    names = simOut.who;
+    ds = [];
+
+    % -------------------------------------------------
+    % 1) simOut 안에 dataset_out이 직접 있는 경우
+    % -------------------------------------------------
+    if any(strcmp(names, "dataset_out"))
+        ds = simOut.get("dataset_out");
+        fprintf("[INFO] dataset_out 사용\n");
     end
-    if isnumeric(x)
-        ts = timeseries(x, t);
-        return;
+
+    % -------------------------------------------------
+    % 2) simOut 안에 out이 있고, out.dataset이 있는 경우
+    % -------------------------------------------------
+    if isempty(ds) && any(strcmp(names, "out"))
+        outVar = simOut.get("out");
+
+        % 객체/struct 둘 다 대응
+        if isstruct(outVar) && isfield(outVar, "dataset")
+            ds = outVar.dataset;
+            fprintf("[INFO] simOut의 out.dataset 사용 (struct)\n");
+        else
+            try
+                ds = outVar.dataset;
+                fprintf("[INFO] simOut의 out.dataset 사용 (object)\n");
+            catch
+            end
+        end
     end
-    % Simulink signal object 형태일 수 있음
-    try
-        if isprop(x, "Values") && isa(x.Values, "timeseries")
-            ts = x.Values;
+
+    % -------------------------------------------------
+    % 3) base workspace의 out.dataset fallback
+    % -------------------------------------------------
+    if isempty(ds) && evalin("base", "exist('out','var')")
+        outVar = evalin("base", "out");
+
+        if isstruct(outVar) && isfield(outVar, "dataset")
+            ds = outVar.dataset;
+            fprintf("[INFO] base workspace의 out.dataset 사용 (struct)\n");
+        else
+            try
+                ds = outVar.dataset;
+                fprintf("[INFO] base workspace의 out.dataset 사용 (object)\n");
+            catch
+            end
+        end
+    end
+
+    if isempty(ds)
+        error("simOut 안에도 dataset_out이 없고, out.dataset도 찾지 못했습니다.");
+    end
+
+    % -------------------------------------------------
+    % Dataset 안에서 신호 읽기
+    % -------------------------------------------------
+    I_data         = getDatasetSignal(ds, ["I_meas","I_sig","I_true"]);
+    HF_energy_data = getDatasetSignal(ds, ["HF_energy","HF_sig"]);
+    HF_rms_data    = getDatasetSignal(ds, ["HF_rms"]);
+    T_data         = getDatasetSignal(ds, ["T_meas","T_sig","T_body"]);
+
+    t_data = getDatasetTime(ds, I_data);
+end
+
+function x = getDatasetSignal(ds, candNames)
+    % 1) 이름으로 직접 접근 시도
+    for k = 1:numel(candNames)
+        name = char(candNames(k));
+        try
+            elem = ds.get(name);
+            vals = elem.Values;
+            x = extractSignalData(vals);
+            fprintf("[INFO] Dataset에서 '%s' 읽음\n", name);
             return;
+        catch
+        end
+    end
+
+    % 2) element 순회하면서 이름 비교
+    try
+        for i = 1:ds.numElements
+            elem = ds{i};
+            if isprop(elem, "Name")
+                nm = string(elem.Name);
+                if any(strcmpi(nm, candNames))
+                    x = extractSignalData(elem.Values);
+                    fprintf("[INFO] Dataset에서 '%s' 읽음\n", nm);
+                    return;
+                end
+            end
         end
     catch
     end
-    error("신호를 timeseries로 변환할 수 없습니다. 타입: %s", class(x));
+
+    error("Dataset에서 후보 신호를 찾지 못했습니다: %s", strjoin(cellstr(candNames), ", "));
 end
 
-function quickPlotAllModes(dataset)
-    figure("Name", "MODE Quick Check");
-    tiledlayout(4,1);
-
-    modes = unique([dataset.runs.mode], "stable");
-
-    for i = 1:numel(modes)
-        m = modes(i);
-        % 해당 MODE 중 첫 run만 사용
-        idx = find([dataset.runs.mode] == m, 1);
-        r = dataset.runs(idx);
-
-        nexttile;
-        plot(r.signals.I.Time, r.signals.I.Data); hold on;
-        plot(r.signals.HF.Time, r.signals.HF.Data);
-        plot(r.signals.T.Time, r.signals.T.Data);
-        hold off;
-
-        title(sprintf("MODE=%d (%s)", r.mode, r.label));
-        xlabel("Time (s)");
-        legend("I","HF","T");
+function t = getDatasetTime(ds, ref)
+    % Dataset 안 첫 번째 timeseries의 Time 사용
+    try
+        for i = 1:ds.numElements
+            elem = ds{i};
+            vals = elem.Values;
+            if isa(vals, "timeseries")
+                t = vals.Time(:);
+                return;
+            end
+        end
+    catch
     end
+
+    % fallback
+    t = (0:numel(ref)-1).';
+end
+
+function x = extractSignalData(sig)
+    if isa(sig, "timeseries")
+        x = sig.Data;
+    elseif isnumeric(sig)
+        x = sig;
+    elseif isstruct(sig) && isfield(sig, "signals")
+        x = sig.signals.values;
+    else
+        try
+            x = sig.Data;
+        catch
+            error("신호 데이터를 추출할 수 없습니다. 타입: %s", class(sig));
+        end
+    end
+
+    x = squeeze(x);
+    x = x(:);
 end
