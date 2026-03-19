@@ -2,7 +2,6 @@ import os
 import glob
 import json
 import pickle
-import re
 import numpy as np
 import pandas as pd
 
@@ -31,9 +30,12 @@ LABEL_MODE = "last"
 # None 이면 purity 체크 안 함
 PURITY_THRESHOLD = None
 
-# CSV 컬럼 가정: [I, HF, T, label]
-SEQ_DIM = 3
-LABEL_COL = 3
+# CSV 컬럼 구조:
+# [I_meas, HF_energy, HF_rms, T_meas, mode]
+REQUIRED_COLS = ["I_meas", "HF_energy", "HF_rms", "T_meas", "mode"]
+
+SEQ_DIM = 4
+LABEL_COL = 4
 
 # CSV split 비율
 TRAIN_RATIO = 0.8
@@ -48,12 +50,15 @@ os.makedirs(SAVE_ROOT, exist_ok=True)
 # =========================================================
 def compute_engineered_features(x_seq: np.ndarray) -> np.ndarray:
     """
-    x_seq: [T, 3] -> columns: I, HF, T
-    return: [9]
+    x_seq: [T, 4]
+    columns: I_meas, HF_energy, HF_rms, T_meas
+
+    return: [11]
     """
     I = x_seq[:, 0]
-    HF = x_seq[:, 1]
-    T = x_seq[:, 2]
+    HF_energy = x_seq[:, 1]
+    HF_rms = x_seq[:, 2]
+    T = x_seq[:, 3]
 
     dT = np.diff(T, prepend=T[0])
 
@@ -61,9 +66,11 @@ def compute_engineered_features(x_seq: np.ndarray) -> np.ndarray:
         I.mean(),
         I.std(),
         np.sqrt(np.mean(I ** 2)),
-        HF.mean(),
-        HF.std(),
-        HF.max(),
+        HF_energy.mean(),
+        HF_energy.std(),
+        HF_energy.max(),
+        HF_rms.mean(),
+        HF_rms.std(),
         T.mean(),
         dT.mean(),
         dT.max(),
@@ -78,12 +85,10 @@ def infer_mode_from_filename(filename: str):
     """
     파일명에서 mode 추정.
     예:
-      normal_01.csv
-      loose_03.csv
-      arc_07.csv
-      overcurrent_10.csv
-
-    필요 시 이 함수만 사용자 파일명에 맞게 수정하시면 됩니다.
+      xxx_mode0_xxx.csv
+      xxx_mode1_xxx.csv
+      xxx_mode2_xxx.csv
+      xxx_mode3_xxx.csv
     """
     name = os.path.basename(filename).lower()
 
@@ -127,7 +132,6 @@ def split_csv_files_by_mode(files):
                 f"최소 3개 이상 필요합니다. 현재: {len(mode_files)}"
             )
 
-        # 1차: train vs temp(val+test)
         train_part, temp_part = train_test_split(
             mode_files,
             test_size=(1.0 - TRAIN_RATIO),
@@ -135,8 +139,6 @@ def split_csv_files_by_mode(files):
             shuffle=True
         )
 
-        # 2차: val vs test
-        # TRAIN=0.8, VAL=0.1, TEST=0.1 이면 temp=0.2 이고 그 반반
         val_part, test_part = train_test_split(
             temp_part,
             test_size=0.5,
@@ -151,15 +153,47 @@ def split_csv_files_by_mode(files):
     return sorted(train_files), sorted(val_files), sorted(test_files)
 
 
+def validate_columns(df: pd.DataFrame, filename: str):
+    missing = [c for c in REQUIRED_COLS if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"필수 컬럼이 없습니다: {filename}\n"
+            f"missing={missing}\n"
+            f"current_columns={list(df.columns)}"
+        )
+
+
 def load_selected_csvs(file_list):
     arrays = []
     file_names = []
 
     for f in file_list:
         df = pd.read_csv(f)
+        validate_columns(df, f)
+
+        # 필요한 컬럼만 명시적으로 선택
+        df = df[REQUIRED_COLS]
+
+        # mode 검증
+        file_mode = infer_mode_from_filename(f)
+        csv_modes = df["mode"].dropna().unique()
+
+        if len(csv_modes) == 0:
+            raise ValueError(f"mode 컬럼이 비어 있습니다: {f}")
+
+        # 파일 내부 mode가 단일 class가 아니어도 일단 허용은 가능하지만,
+        # 기본적으로는 한 파일이 한 mode라고 가정하는 편이 안전합니다.
+        if len(csv_modes) == 1:
+            csv_mode = int(csv_modes[0])
+            if csv_mode != file_mode:
+                raise ValueError(
+                    f"파일명 mode와 CSV 내부 mode가 다릅니다: {f}\n"
+                    f"filename_mode={file_mode}, csv_mode={csv_mode}"
+                )
+
         arr = df.to_numpy(dtype=np.float32)
 
-        if arr.shape[1] < 4:
+        if arr.shape[1] < 5:
             raise ValueError(f"CSV 컬럼 수가 부족합니다: {f}, shape={arr.shape}")
 
         arrays.append(arr)
@@ -209,7 +243,7 @@ def make_sequences(arrays, file_names, window, stride, label_mode="last", purity
     meta_all = []
 
     for arr, fname in zip(arrays, file_names):
-        X = arr[:, :SEQ_DIM]
+        X = arr[:, :SEQ_DIM].astype(np.float32)
         y = arr[:, LABEL_COL].astype(np.int64)
 
         if len(X) < window:
@@ -363,6 +397,10 @@ def process_one_window(train_arrays, train_names,
     print(f"[INFO] Val   class dist: {class_distribution(y_val)}")
     print(f"[INFO] Test  class dist: {class_distribution(y_test)}")
 
+    print(f"[DEBUG] y_train unique: {np.unique(y_train)}")
+    print(f"[DEBUG] y_val unique  : {np.unique(y_val)}")
+    print(f"[DEBUG] y_test unique : {np.unique(y_test)}")
+
     # -----------------------------
     # normalize (train 기준)
     # -----------------------------
@@ -403,7 +441,7 @@ def process_one_window(train_arrays, train_names,
         "purity_threshold": PURITY_THRESHOLD,
         "random_state": RANDOM_STATE,
         "seq_dim": SEQ_DIM,
-        "feat_dim": 9,
+        "feat_dim": int(X_feat_train.shape[1]),
         "num_classes": int(len(np.unique(y_train))),
         "train_distribution": class_distribution(y_train),
         "val_distribution": class_distribution(y_val),
