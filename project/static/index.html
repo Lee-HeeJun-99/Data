@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Industrial Sensor GRU Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg:#09111f;
+      --panel:#111b2e;
+      --panel2:#0f1728;
+      --border:rgba(255,255,255,0.08);
+      --text:#edf3ff;
+      --muted:#9baccc;
+      --blue:#56a3ff;
+      --cyan:#39c6d6;
+      --green:#2fd07e;
+      --yellow:#f4c84c;
+      --orange:#ff9945;
+      --red:#ff5f6d;
+      --shadow:0 10px 24px rgba(0,0,0,0.25);
+      --radius:16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body{
+      margin:0;
+      background:
+        radial-gradient(circle at top left, rgba(86,163,255,0.16), transparent 24%),
+        linear-gradient(180deg, #08101d 0%, #0a1220 100%);
+      color:var(--text);
+      font-family:"Segoe UI","Pretendard",Arial,sans-serif;
+    }
+
+    .container{
+      max-width:1680px;
+      margin:0 auto;
+      padding:16px;
+    }
+
+    .header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .title-wrap h1{
+      margin:0;
+      font-size:1.65rem;
+      font-weight:800;
+      letter-spacing:-0.02em;
+    }
+
+    .title-wrap .sub{
+      color:var(--muted);
+      margin-top:4px;
+      font-size:0.92rem;
+    }
+
+    .system-pill{
+      padding:8px 14px;
+      border-radius:999px;
+      font-weight:700;
+      font-size:0.9rem;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,0.04);
+    }
+
+    .system-idle{ color:#d6def0; }
+    .system-running{ color:var(--blue); }
+    .system-alarm{ color:var(--red); }
+    .system-stopped{ color:#c9d3e8; }
+    .system-error{ color:var(--red); }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
+
+    .toolbar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      align-items:center;
+      padding:12px;
+      margin-bottom:12px;
+    }
+
+    .toolbar label{
+      color:var(--muted);
+      font-size:0.9rem;
+    }
+
+    select, input, button{
+      border-radius:12px;
+      border:1px solid var(--border);
+      padding:9px 12px;
+      font-size:0.92rem;
+      color:var(--text);
+      background:rgba(255,255,255,0.04);
+    }
+
+    button{
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    .btn-primary{
+      background:linear-gradient(135deg,#4c90ff,#2e6dff);
+      border:none;
+    }
+
+    .btn-stop{
+      background:linear-gradient(135deg,#ff7b7b,#e45858);
+      border:none;
+    }
+
+    .alert-banner{
+      display:none;
+      margin-bottom:12px;
+      padding:12px 14px;
+      border-radius:14px;
+      background:rgba(255,95,109,0.16);
+      border:1px solid rgba(255,95,109,0.28);
+      color:#ffd8dd;
+      font-weight:700;
+    }
+
+    .top-grid{
+      display:grid;
+      grid-template-columns:repeat(5, 1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .kpi{
+      padding:12px 14px;
+      min-height:88px;
+    }
+
+    .kpi .label{
+      color:var(--muted);
+      font-size:0.84rem;
+      margin-bottom:8px;
+    }
+
+    .kpi .value{
+      font-size:1.45rem;
+      font-weight:800;
+      line-height:1.1;
+    }
+
+    .state-normal{ color:var(--green); }
+    .state-loose{ color:var(--yellow); }
+    .state-arc{ color:var(--orange); }
+    .state-overcurrent{ color:var(--red); }
+
+    .progress-text{
+      margin-top:8px;
+      color:var(--muted);
+      font-size:0.84rem;
+    }
+
+    .progress-bg{
+      width:100%;
+      height:10px;
+      border-radius:999px;
+      overflow:hidden;
+      background:rgba(255,255,255,0.08);
+      margin-top:6px;
+    }
+
+    .progress-bar{
+      width:0%;
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg,#4b8dff,#39c6d6);
+      transition:width 0.15s ease;
+    }
+
+    .charts-grid{
+      display:grid;
+      grid-template-columns:repeat(4, 1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .chart-card{
+      padding:10px 10px 8px 10px;
+      min-height:220px;
+    }
+
+    .chart-card h3{
+      margin:0 0 6px 0;
+      font-size:0.98rem;
+      color:#dfe7f8;
+    }
+
+    canvas{
+      height:170px !important;
+    }
+
+    .bottom-grid{
+      display:grid;
+      grid-template-columns:0.95fr 1.05fr;
+      gap:10px;
+    }
+
+    .info-card, .table-card{
+      padding:12px;
+      min-height:300px;
+    }
+
+    .info-card h3, .table-card h3{
+      margin:0 0 10px 0;
+      font-size:1rem;
+    }
+
+    .prob-row{
+      margin-bottom:10px;
+    }
+
+    .prob-head{
+      display:flex;
+      justify-content:space-between;
+      color:var(--muted);
+      font-size:0.88rem;
+      margin-bottom:5px;
+    }
+
+    .prob-bg{
+      width:100%;
+      height:12px;
+      border-radius:999px;
+      overflow:hidden;
+      background:rgba(255,255,255,0.08);
+    }
+
+    .prob-bar{
+      width:0%;
+      height:100%;
+      border-radius:999px;
+      transition:width 0.15s ease;
+    }
+
+    .bar-normal{ background:linear-gradient(90deg,#2fd07e,#56f0aa); }
+    .bar-loose{ background:linear-gradient(90deg,#ddb333,#ffd75b); }
+    .bar-arc{ background:linear-gradient(90deg,#ff9344,#ffb668); }
+    .bar-overcurrent{ background:linear-gradient(90deg,#ff5767,#ff818c); }
+
+    .sensor-grid{
+      margin-top:12px;
+      padding-top:10px;
+      border-top:1px solid var(--border);
+      display:grid;
+      grid-template-columns:120px 1fr 120px 1fr;
+      gap:8px 10px;
+      font-size:0.88rem;
+    }
+
+    .sensor-grid .k{
+      color:var(--muted);
+    }
+
+    .log-wrap{
+      max-height:330px;
+      overflow:auto;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.05);
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:0.86rem;
+    }
+
+    th, td{
+      padding:8px 6px;
+      text-align:center;
+      border-bottom:1px solid rgba(255,255,255,0.05);
+    }
+
+    th{
+      position:sticky;
+      top:0;
+      background:#162136;
+      color:#dbe5f8;
+      z-index:1;
+    }
+
+    .pill{
+      display:inline-block;
+      min-width:76px;
+      padding:4px 8px;
+      border-radius:999px;
+      font-weight:700;
+      font-size:0.8rem;
+    }
+
+    .pill.normal{ background:rgba(47,208,126,0.14); color:var(--green); }
+    .pill.loose{ background:rgba(244,200,76,0.14); color:var(--yellow); }
+    .pill.arc{ background:rgba(255,153,69,0.14); color:var(--orange); }
+    .pill.overcurrent{ background:rgba(255,95,109,0.14); color:var(--red); }
+
+    .error-box{
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,95,109,0.12);
+      border:1px solid rgba(255,95,109,0.22);
+      color:#ffd7dc;
+      display:none;
+      font-size:0.86rem;
+      white-space:pre-wrap;
+    }
+
+    @media (max-width: 1400px){
+      .charts-grid{ grid-template-columns:repeat(2,1fr); }
+      .top-grid{ grid-template-columns:repeat(3,1fr); }
+      .bottom-grid{ grid-template-columns:1fr; }
+    }
+
+    @media (max-width: 900px){
+      .top-grid{ grid-template-columns:repeat(2,1fr); }
+      .charts-grid{ grid-template-columns:1fr; }
+      .sensor-grid{ grid-template-columns:110px 1fr; }
+      .header{ flex-direction:column; align-items:flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title-wrap">
+        <h1>Industrial Sensor + GRU Monitoring</h1>
+        <div class="sub">실시간 센서 모니터링 / GRU 추론 / 알람 상태 감시</div>
+      </div>
+      <div id="systemBadge" class="system-pill system-idle">IDLE</div>
+    </div>
+
+    <div id="alertBanner" class="alert-banner">
+      연속 이상 감지: 운영 알람 상태입니다.
+    </div>
+
+    <div class="toolbar panel">
+      <label>CSV 파일</label>
+      <select id="csvSelect"></select>
+
+      <label>재생 간격(초)</label>
+      <input id="speedInput" type="number" step="0.01" value="0.03" min="0.01" />
+
+      <button class="btn-primary" onclick="startReplay()">재생 시작</button>
+      <button class="btn-stop" onclick="stopReplay()">재생 중지</button>
+    </div>
+
+    <div class="top-grid">
+      <div class="panel kpi">
+        <div class="label">현재 예측</div>
+        <div id="predMode" class="value">-</div>
+      </div>
+
+      <div class="panel kpi">
+        <div class="label">Confidence</div>
+        <div id="confidence" class="value">-</div>
+      </div>
+
+      <div class="panel kpi">
+        <div class="label">현재 파일</div>
+        <div id="sourceFile" class="value" style="font-size:1.05rem;">-</div>
+      </div>
+
+      <div class="panel kpi">
+        <div class="label">Alert Count</div>
+        <div id="alertCountKpi" class="value">0</div>
+      </div>
+
+      <div class="panel kpi">
+        <div class="label">진행 상태</div>
+        <div id="running" class="value">STOP</div>
+        <div id="progressText" class="progress-text">0 / 0</div>
+        <div class="progress-bg">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="panel chart-card">
+        <h3>I_meas</h3>
+        <canvas id="chartI"></canvas>
+      </div>
+
+      <div class="panel chart-card">
+        <h3>HF_energy</h3>
+        <canvas id="chartHFenergy"></canvas>
+      </div>
+
+      <div class="panel chart-card">
+        <h3>HF_rms</h3>
+        <canvas id="chartHFrms"></canvas>
+      </div>
+
+      <div class="panel chart-card">
+        <h3>T_meas</h3>
+        <canvas id="chartT"></canvas>
+      </div>
+    </div>
+
+    <div class="bottom-grid">
+      <div class="panel info-card">
+        <h3>추론 확률 / 현재 센서 상태</h3>
+
+        <div class="prob-row">
+          <div class="prob-head"><span>normal</span><span id="p_normal_text">0.0000</span></div>
+          <div class="prob-bg"><div id="p_normal_bar" class="prob-bar bar-normal"></div></div>
+        </div>
+
+        <div class="prob-row">
+          <div class="prob-head"><span>loose</span><span id="p_loose_text">0.0000</span></div>
+          <div class="prob-bg"><div id="p_loose_bar" class="prob-bar bar-loose"></div></div>
+        </div>
+
+        <div class="prob-row">
+          <div class="prob-head"><span>arc</span><span id="p_arc_text">0.0000</span></div>
+          <div class="prob-bg"><div id="p_arc_bar" class="prob-bar bar-arc"></div></div>
+        </div>
+
+        <div class="prob-row">
+          <div class="prob-head"><span>overcurrent</span><span id="p_overcurrent_text">0.0000</span></div>
+          <div class="prob-bg"><div id="p_overcurrent_bar" class="prob-bar bar-overcurrent"></div></div>
+        </div>
+
+        <div class="sensor-grid">
+          <div class="k">row</div><div id="row_index">-</div>
+          <div class="k">true mode</div><div id="true_mode">-</div>
+
+          <div class="k">I_meas</div><div id="I_meas">-</div>
+          <div class="k">HF_energy</div><div id="HF_energy">-</div>
+
+          <div class="k">HF_rms</div><div id="HF_rms">-</div>
+          <div class="k">T_meas</div><div id="T_meas">-</div>
+
+          <div class="k">status</div><div id="systemStatusText">IDLE</div>
+          <div class="k">alert count</div><div id="alert_count">0</div>
+        </div>
+
+        <div id="errorBox" class="error-box"></div>
+      </div>
+
+      <div class="panel table-card">
+        <h3>최근 이벤트 로그</h3>
+        <div class="log-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>row</th>
+                <th>true</th>
+                <th>pred</th>
+                <th>conf</th>
+                <th>alert</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MAX_POINTS = 80;
+    const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
+    const historyBody = document.getElementById("historyBody");
+
+    function getStateClass(name) {
+      if (name === "normal") return "state-normal";
+      if (name === "loose") return "state-loose";
+      if (name === "arc") return "state-arc";
+      if (name === "overcurrent") return "state-overcurrent";
+      return "";
+    }
+
+    function getSystemClass(status) {
+      if (status === "RUNNING") return "system-running";
+      if (status === "ALARM") return "system-alarm";
+      if (status === "STOPPED") return "system-stopped";
+      if (status === "ERROR") return "system-error";
+      return "system-idle";
+    }
+
+    function createLineChart(canvasId, label, borderColor) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      return new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            label: label,
+            data: [],
+            borderColor: borderColor,
+            borderWidth: 2,
+            tension: 0.18,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#d8e2f6" } }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#90a2c8", maxTicksLimit: 8 },
+              grid: { color: "rgba(255,255,255,0.05)" }
+            },
+            y: {
+              ticks: { color: "#90a2c8", maxTicksLimit: 6 },
+              grid: { color: "rgba(255,255,255,0.05)" }
+            }
+          }
+        }
+      });
+    }
+
+    const chartI = createLineChart("chartI", "I_meas", "#56a3ff");
+    const chartHFenergy = createLineChart("chartHFenergy", "HF_energy", "#39c6d6");
+    const chartHFrms = createLineChart("chartHFrms", "HF_rms", "#f4c84c");
+    const chartT = createLineChart("chartT", "T_meas", "#ff9945");
+
+    function pushChart(chart, x, y) {
+      chart.data.labels.push(x);
+      chart.data.datasets[0].data.push(y);
+
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+
+      chart.update();
+    }
+
+    function setProbabilityBar(idPrefix, value) {
+      const pct = Math.max(0, Math.min(100, value * 100));
+      document.getElementById(`${idPrefix}_bar`).style.width = `${pct}%`;
+      document.getElementById(`${idPrefix}_text`).innerText = value.toFixed(4);
+    }
+
+    function updateSystemStatus(status) {
+      const badge = document.getElementById("systemBadge");
+      badge.innerText = status || "IDLE";
+      badge.className = `system-pill ${getSystemClass(status)}`;
+      document.getElementById("systemStatusText").innerText = status || "IDLE";
+    }
+
+    function updateHeader(data) {
+      document.getElementById("running").innerText = data.running ? "RUN" : "STOP";
+      document.getElementById("sourceFile").innerText = data.source_file || "-";
+      document.getElementById("alert_count").innerText = data.alert_count ?? 0;
+      document.getElementById("alertCountKpi").innerText = data.alert_count ?? 0;
+
+      const current = data.current_row ?? 0;
+      const total = data.total_rows ?? 0;
+      document.getElementById("progressText").innerText = `${current} / ${total}`;
+
+      const ratio = total > 0 ? (current / total) * 100 : 0;
+      document.getElementById("progressBar").style.width = `${ratio}%`;
+
+      document.getElementById("alertBanner").style.display = data.alert_active ? "block" : "none";
+      updateSystemStatus(data.system_status);
+
+      const errorBox = document.getElementById("errorBox");
+      if (data.last_error) {
+        errorBox.style.display = "block";
+        errorBox.innerText = data.last_error;
+      } else {
+        errorBox.style.display = "none";
+        errorBox.innerText = "";
+      }
+
+      const csvSelect = document.getElementById("csvSelect");
+      const currentValue = csvSelect.value;
+      csvSelect.innerHTML = "";
+
+      if (data.available_csv_files) {
+        data.available_csv_files.forEach(file => {
+          const option = document.createElement("option");
+          option.value = file;
+          option.textContent = file;
+          if (file === currentValue || file === data.source_file) option.selected = true;
+          csvSelect.appendChild(option);
+        });
+      }
+    }
+
+    function updateSensor(sensor) {
+      if (!sensor) return;
+
+      document.getElementById("row_index").innerText = sensor.row_index ?? "-";
+      document.getElementById("true_mode").innerText = sensor.mode ?? "-";
+      document.getElementById("I_meas").innerText = sensor.I_meas?.toFixed(4) ?? "-";
+      document.getElementById("HF_energy").innerText = sensor.HF_energy?.toFixed(6) ?? "-";
+      document.getElementById("HF_rms").innerText = sensor.HF_rms?.toFixed(4) ?? "-";
+      document.getElementById("T_meas").innerText = sensor.T_meas?.toFixed(4) ?? "-";
+
+      pushChart(chartI, sensor.row_index, sensor.I_meas);
+      pushChart(chartHFenergy, sensor.row_index, sensor.HF_energy);
+      pushChart(chartHFrms, sensor.row_index, sensor.HF_rms);
+      pushChart(chartT, sensor.row_index, sensor.T_meas);
+    }
+
+    function updatePrediction(pred) {
+      if (!pred) return;
+
+      const predEl = document.getElementById("predMode");
+      predEl.innerText = pred.pred_mode_name;
+      predEl.className = `value ${getStateClass(pred.pred_mode_name)}`;
+
+      document.getElementById("confidence").innerText = pred.confidence.toFixed(4);
+
+      setProbabilityBar("p_normal", pred.probabilities.normal);
+      setProbabilityBar("p_loose", pred.probabilities.loose);
+      setProbabilityBar("p_arc", pred.probabilities.arc);
+      setProbabilityBar("p_overcurrent", pred.probabilities.overcurrent);
+    }
+
+    function makePredPill(name) {
+      if (!name) return `<span class="pill">-</span>`;
+      return `<span class="pill ${name}">${name}</span>`;
+    }
+
+    function appendHistory(item) {
+      if (!item) return;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${item.row_index ?? "-"}</td>
+        <td>${item.true_mode ?? "-"}</td>
+        <td>${makePredPill(item.pred_mode_name)}</td>
+        <td>${item.confidence != null ? item.confidence.toFixed(4) : "-"}</td>
+        <td>${item.alert_active ? "ON" : "-"}</td>
+        <td>${item.system_status ?? "-"}</td>
+      `;
+
+      historyBody.prepend(tr);
+
+      while (historyBody.children.length > 25) {
+        historyBody.removeChild(historyBody.lastChild);
+      }
+    }
+
+    function resetChartsAndHistory() {
+      [chartI, chartHFenergy, chartHFrms, chartT].forEach(chart => {
+        chart.data.labels = [];
+        chart.data.datasets[0].data = [];
+        chart.update();
+      });
+      historyBody.innerHTML = "";
+    }
+
+    ws.onopen = () => console.log("[WS] connected");
+    ws.onerror = (e) => console.error("[WS] error", e);
+    ws.onclose = () => console.warn("[WS] closed");
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.type === "status") {
+        updateHeader(data);
+        if (data.latest_sensor) updateSensor(data.latest_sensor);
+        if (data.latest_prediction) updatePrediction(data.latest_prediction);
+
+        historyBody.innerHTML = "";
+        if (data.history) {
+          [...data.history].reverse().slice(0, 25).forEach(appendHistory);
+        }
+      }
+
+      if (data.type === "update") {
+        updateSensor(data.sensor);
+        updatePrediction(data.prediction);
+
+        if (data.progress) {
+          const current = data.progress.current_row ?? 0;
+          const total = data.progress.total_rows ?? 0;
+          document.getElementById("progressText").innerText = `${current} / ${total}`;
+          const ratio = total > 0 ? (current / total) * 100 : 0;
+          document.getElementById("progressBar").style.width = `${ratio}%`;
+        }
+
+        if (data.alert) {
+          document.getElementById("alert_count").innerText = data.alert.count ?? 0;
+          document.getElementById("alertCountKpi").innerText = data.alert.count ?? 0;
+          document.getElementById("alertBanner").style.display = data.alert.active ? "block" : "none";
+        }
+
+        if (data.system_status) {
+          updateSystemStatus(data.system_status);
+        }
+
+        appendHistory(data.history_item);
+      }
+
+      if (data.type === "error") {
+        const errorBox = document.getElementById("errorBox");
+        errorBox.style.display = "block";
+        errorBox.innerText = data.message;
+        updateSystemStatus("ERROR");
+      }
+    };
+
+    async function loadFiles() {
+      const res = await fetch("/api/files");
+      const data = await res.json();
+      const csvSelect = document.getElementById("csvSelect");
+      csvSelect.innerHTML = "";
+
+      data.files.forEach(file => {
+        const option = document.createElement("option");
+        option.value = file;
+        option.textContent = file;
+        csvSelect.appendChild(option);
+      });
+    }
+
+    async function startReplay() {
+      resetChartsAndHistory();
+
+      const csvFile = document.getElementById("csvSelect").value;
+      const replayInterval = parseFloat(document.getElementById("speedInput").value);
+
+      const res = await fetch("/api/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csv_file: csvFile,
+          replay_interval: replayInterval
+        })
+      });
+
+      const data = await res.json();
+      console.log("[START RESPONSE]", data);
+
+      if (!res.ok || !data.ok) {
+        alert("재생 시작 실패");
+      }
+    }
+
+    async function stopReplay() {
+      await fetch("/api/stop", { method: "POST" });
+    }
+
+    loadFiles();
+  </script>
+</body>
+</html>
