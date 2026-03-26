@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Industrial Monitoring Service</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg:#08111f;
+      --panel:#101a2d;
+      --panel-2:#0d1728;
+      --border:rgba(255,255,255,.08);
+      --text:#eef3ff;
+      --muted:#98a8c8;
+      --blue:#58a6ff;
+      --green:#2fd07d;
+      --yellow:#f2c94c;
+      --orange:#ff9d43;
+      --red:#ff5f6d;
+      --shadow:0 10px 24px rgba(0,0,0,.28);
+      --radius:16px;
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      color:var(--text);
+      font-family:"Segoe UI","Pretendard",Arial,sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(88,166,255,.18), transparent 20%),
+        linear-gradient(180deg,#07101c 0%,#0a1220 100%);
+    }
+
+    .hidden{ display:none !important; }
+
+    .login-page{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+
+    .login-card{
+      width:100%;
+      max-width:430px;
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:20px;
+      box-shadow:var(--shadow);
+      padding:28px;
+    }
+
+    .login-card h1{
+      margin:0 0 8px 0;
+      font-size:1.6rem;
+    }
+
+    .login-card p{
+      margin:0 0 18px 0;
+      color:var(--muted);
+      line-height:1.5;
+      font-size:.92rem;
+    }
+
+    .login-card input{
+      width:100%;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      padding:12px 14px;
+      margin-bottom:10px;
+      font-size:.95rem;
+      outline:none;
+    }
+
+    .login-card input:focus{
+      border-color:rgba(88,166,255,.4);
+      box-shadow:0 0 0 3px rgba(88,166,255,.12);
+    }
+
+    .login-card button{
+      width:100%;
+      border:none;
+      border-radius:12px;
+      padding:12px 14px;
+      font-size:.95rem;
+      font-weight:700;
+      color:white;
+      cursor:pointer;
+      background:linear-gradient(135deg,#4e90ff,#2b6eff);
+    }
+
+    .login-hint{
+      margin-top:14px;
+      color:var(--muted);
+      font-size:.85rem;
+      line-height:1.5;
+    }
+
+    .login-error{
+      margin-top:10px;
+      color:#ffd0d5;
+      font-size:.88rem;
+      min-height:20px;
+    }
+
+    .app-shell{
+      min-height:100vh;
+    }
+
+    .layout{
+      display:grid;
+      grid-template-columns: 380px 1fr;
+      min-height:100vh;
+    }
+
+    .sidebar{
+      background:rgba(8,14,25,.96);
+      border-right:1px solid var(--border);
+      padding:18px;
+      overflow:hidden;
+    }
+
+    .brand{
+      margin-bottom:16px;
+    }
+
+    .brand h1{
+      margin:0;
+      font-size:1.25rem;
+      font-weight:800;
+    }
+
+    .brand p{
+      margin:6px 0 0;
+      color:var(--muted);
+      font-size:.88rem;
+      line-height:1.45;
+    }
+
+    .user-box{
+      margin-top:12px;
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.06);
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:10px;
+    }
+
+    .user-meta{
+      min-width:0;
+    }
+
+    .user-meta .name{
+      font-weight:700;
+      font-size:.94rem;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .user-meta .role{
+      color:var(--muted);
+      font-size:.82rem;
+      margin-top:4px;
+    }
+
+    .user-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .side-btn{
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      padding:8px 10px;
+      font-size:.82rem;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+
+    .toolbar-side{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      margin:14px 0;
+    }
+
+    .search-box, .filter-select, .speed-input{
+      width:100%;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      padding:10px 12px;
+      font-size:.9rem;
+      outline:none;
+    }
+
+    .search-box:focus, .filter-select:focus, .speed-input:focus{
+      border-color:rgba(88,166,255,.4);
+      box-shadow:0 0 0 3px rgba(88,166,255,.12);
+    }
+
+    .side-label{
+      color:var(--muted);
+      font-size:.82rem;
+      margin-bottom:8px;
+    }
+
+    .side-summary{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      margin-bottom:10px;
+      color:var(--muted);
+      font-size:.8rem;
+    }
+
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
+
+    .device-list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      max-height:calc(100vh - 310px);
+      overflow:auto;
+      padding-right:4px;
+    }
+
+    .device-card{
+      padding:12px;
+      cursor:pointer;
+      transition:.15s ease;
+    }
+
+    .device-card:hover{
+      transform:translateY(-1px);
+      border-color:rgba(88,166,255,.35);
+    }
+
+    .device-card.active{
+      outline:2px solid rgba(88,166,255,.45);
+      background:linear-gradient(180deg, rgba(88,166,255,.10), rgba(88,166,255,.04));
+    }
+
+    .device-top{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:8px;
+      margin-bottom:8px;
+    }
+
+    .device-left{
+      display:flex;
+      align-items:flex-start;
+      gap:8px;
+      min-width:0;
+    }
+
+    .status-dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      box-shadow:0 0 10px rgba(255,255,255,.12);
+      flex:0 0 auto;
+      margin-top:5px;
+    }
+
+    .dot-idle{ background:#b8c3dc; }
+    .dot-running{ background:var(--blue); }
+    .dot-alarm{ background:var(--red); }
+    .dot-stopped{ background:#cfd8ef; }
+    .dot-error{ background:var(--red); }
+
+    .device-name-wrap{
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+
+    .device-display-name{
+      font-weight:800;
+      font-size:.95rem;
+      line-height:1.3;
+      word-break:break-word;
+    }
+
+    .device-id-sub{
+      font-size:.76rem;
+      color:var(--muted);
+      word-break:break-all;
+    }
+
+    .status-pill{
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:.72rem;
+      font-weight:700;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+
+    .idle{ background:rgba(255,255,255,.08); color:#dbe2f5; }
+    .running{ background:rgba(88,166,255,.16); color:var(--blue); }
+    .alarm{ background:rgba(255,95,109,.16); color:var(--red); }
+    .stopped{ background:rgba(255,255,255,.08); color:#cfd8ef; }
+    .error{ background:rgba(255,95,109,.16); color:var(--red); }
+
+    .device-sub{
+      color:var(--muted);
+      font-size:.79rem;
+      margin-bottom:8px;
+      word-break:break-all;
+      line-height:1.35;
+    }
+
+    .device-meta{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:6px 10px;
+      margin-bottom:8px;
+      font-size:.77rem;
+      color:var(--muted);
+    }
+
+    .device-meta strong{
+      color:var(--text);
+      font-weight:700;
+      margin-left:4px;
+    }
+
+    .mini-progress-text{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      color:var(--muted);
+      font-size:.75rem;
+      margin-bottom:5px;
+    }
+
+    .mini-progress-bg{
+      width:100%;
+      height:8px;
+      border-radius:999px;
+      overflow:hidden;
+      background:rgba(255,255,255,.08);
+      margin-bottom:8px;
+    }
+
+    .mini-progress-bar{
+      width:0%;
+      height:100%;
+      background:linear-gradient(90deg,#58a6ff,#37d0d6);
+      border-radius:999px;
+      transition:width .15s ease;
+    }
+
+    .device-footer{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:8px;
+      font-size:.77rem;
+      margin-bottom:8px;
+    }
+
+    .pred-badge{
+      display:inline-block;
+      min-width:72px;
+      padding:4px 8px;
+      border-radius:999px;
+      text-align:center;
+      font-weight:700;
+      font-size:.74rem;
+    }
+
+    .pred-normal{ background:rgba(47,208,125,.14); color:var(--green); }
+    .pred-loose{ background:rgba(242,201,76,.14); color:var(--yellow); }
+    .pred-arc{ background:rgba(255,157,67,.14); color:var(--orange); }
+    .pred-overcurrent{ background:rgba(255,95,109,.14); color:var(--red); }
+    .pred-none{ background:rgba(255,255,255,.08); color:#dbe2f5; }
+
+    .alert-mini{
+      font-weight:700;
+      color:var(--muted);
+    }
+
+    .alert-mini.on{
+      color:var(--red);
+    }
+
+    .spark-wrap{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:6px;
+    }
+
+    .spark-box{
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.05);
+      border-radius:10px;
+      padding:4px;
+      height:42px;
+    }
+
+    .spark-box canvas{
+      width:100%;
+      height:100% !important;
+    }
+
+    .empty-side{
+      padding:20px 14px;
+      text-align:center;
+      color:var(--muted);
+      font-size:.9rem;
+      border:1px dashed rgba(255,255,255,.12);
+      border-radius:14px;
+      background:rgba(255,255,255,.02);
+    }
+
+    .main{
+      padding:16px;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      margin-bottom:12px;
+    }
+
+    .title h2{
+      margin:0;
+      font-size:1.5rem;
+      font-weight:800;
+      line-height:1.3;
+    }
+
+    .title p{
+      margin:5px 0 0;
+      color:var(--muted);
+      font-size:.9rem;
+      line-height:1.45;
+      word-break:break-all;
+    }
+
+    .controls{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .controls button{
+      border-radius:12px;
+      padding:9px 12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      font-size:.92rem;
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    .btn-primary{
+      background:linear-gradient(135deg,#4e90ff,#2b6eff) !important;
+      border:none !important;
+    }
+
+    .btn-stop{
+      background:linear-gradient(135deg,#ff7b7b,#e25555) !important;
+      border:none !important;
+    }
+
+    .speed-presets{
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+    }
+
+    .preset-btn{
+      padding:8px 10px !important;
+      font-size:.82rem !important;
+    }
+
+    .status-row{
+      display:grid;
+      grid-template-columns: 1fr auto auto;
+      gap:10px;
+      align-items:center;
+      margin-bottom:12px;
+    }
+
+    .alert-banner{
+      display:none;
+      padding:11px 14px;
+      border-radius:14px;
+      border:1px solid rgba(255,95,109,.22);
+      background:rgba(255,95,109,.12);
+      color:#ffd8dd;
+      font-weight:700;
+    }
+
+    .conn-badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      font-size:.86rem;
+      font-weight:700;
+    }
+
+    .conn-dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      background:#cfd8ef;
+    }
+
+    .conn-connected{ background:var(--green); }
+    .conn-connecting{ background:var(--yellow); }
+    .conn-disconnected{ background:var(--red); }
+
+    .kpi-grid{
+      display:grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .kpi{
+      padding:12px 14px;
+      min-height:92px;
+    }
+
+    .kpi .label{
+      color:var(--muted);
+      font-size:.82rem;
+      margin-bottom:8px;
+    }
+
+    .kpi .value{
+      font-size:1.35rem;
+      font-weight:800;
+      line-height:1.1;
+      word-break:break-word;
+    }
+
+    .state-normal{ color:var(--green); }
+    .state-loose{ color:var(--yellow); }
+    .state-arc{ color:var(--orange); }
+    .state-overcurrent{ color:var(--red); }
+
+    .progress-bg{
+      width:100%;
+      height:10px;
+      background:rgba(255,255,255,.08);
+      border-radius:999px;
+      overflow:hidden;
+      margin-top:8px;
+    }
+
+    .progress-bar{
+      width:0%;
+      height:100%;
+      background:linear-gradient(90deg,#58a6ff,#37d0d6);
+      transition:width .15s ease;
+    }
+
+    .charts-grid{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:10px;
+      margin-bottom:12px;
+    }
+
+    .chart-card{
+      padding:10px;
+      min-height:220px;
+    }
+
+    .chart-card h3{
+      margin:0 0 6px;
+      font-size:.96rem;
+    }
+
+    .main-chart{
+      height:170px !important;
+    }
+
+    .bottom-grid{
+      display:grid;
+      grid-template-columns: .95fr 1.05fr;
+      gap:10px;
+    }
+
+    .info-card, .table-card{
+      padding:12px;
+      min-height:320px;
+    }
+
+    .info-card h3, .table-card h3{
+      margin:0 0 10px;
+      font-size:1rem;
+    }
+
+    .prob-row{ margin-bottom:10px; }
+
+    .prob-head{
+      display:flex;
+      justify-content:space-between;
+      color:var(--muted);
+      font-size:.85rem;
+      margin-bottom:4px;
+    }
+
+    .prob-bg{
+      width:100%;
+      height:12px;
+      background:rgba(255,255,255,.08);
+      border-radius:999px;
+      overflow:hidden;
+    }
+
+    .prob-bar{
+      width:0%;
+      height:100%;
+      border-radius:999px;
+      transition:width .15s ease;
+    }
+
+    .bar-normal{ background:linear-gradient(90deg,#2fd07d,#57efaa); }
+    .bar-loose{ background:linear-gradient(90deg,#ddb333,#ffd75b); }
+    .bar-arc{ background:linear-gradient(90deg,#ff9342,#ffb866); }
+    .bar-overcurrent{ background:linear-gradient(90deg,#ff5968,#ff818c); }
+
+    .sensor-grid{
+      margin-top:12px;
+      padding-top:10px;
+      border-top:1px solid var(--border);
+      display:grid;
+      grid-template-columns:120px 1fr 120px 1fr;
+      gap:8px 10px;
+      font-size:.86rem;
+    }
+
+    .sensor-grid .k{ color:var(--muted); }
+
+    .log-wrap{
+      max-height:350px;
+      overflow:auto;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.05);
+    }
+
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:.84rem;
+    }
+
+    th, td{
+      padding:8px 6px;
+      text-align:center;
+      border-bottom:1px solid rgba(255,255,255,.05);
+    }
+
+    th{
+      position:sticky;
+      top:0;
+      background:#162136;
+      z-index:1;
+      color:#dbe5f8;
+    }
+
+    .pred-pill{
+      display:inline-block;
+      min-width:76px;
+      padding:4px 8px;
+      border-radius:999px;
+      font-size:.78rem;
+      font-weight:700;
+    }
+
+    .pred-normal-row{ background:rgba(47,208,125,.14); color:var(--green); }
+    .pred-loose-row{ background:rgba(242,201,76,.14); color:var(--yellow); }
+    .pred-arc-row{ background:rgba(255,157,67,.14); color:var(--orange); }
+    .pred-overcurrent-row{ background:rgba(255,95,109,.14); color:var(--red); }
+
+    .error-box{
+      display:none;
+      margin-top:12px;
+      padding:10px 12px;
+      border-radius:12px;
+      background:rgba(255,95,109,.12);
+      border:1px solid rgba(255,95,109,.22);
+      color:#ffd8dd;
+      font-size:.84rem;
+      white-space:pre-wrap;
+      line-height:1.45;
+    }
+
+    .empty-main{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:320px;
+      color:var(--muted);
+      border:1px dashed rgba(255,255,255,.12);
+      border-radius:16px;
+      background:rgba(255,255,255,.02);
+      font-size:.96rem;
+      text-align:center;
+      padding:24px;
+    }
+
+    @media (max-width: 1550px){
+      .charts-grid{ grid-template-columns:repeat(2,1fr); }
+      .kpi-grid{ grid-template-columns:repeat(3,1fr); }
+      .bottom-grid{ grid-template-columns:1fr; }
+    }
+
+    @media (max-width: 1180px){
+      .layout{ grid-template-columns:1fr; }
+      .sidebar{ border-right:none; border-bottom:1px solid var(--border); }
+      .device-list{ max-height:320px; }
+    }
+
+    @media (max-width: 760px){
+      .kpi-grid{ grid-template-columns:repeat(2,1fr); }
+      .charts-grid{ grid-template-columns:1fr; }
+      .sensor-grid{ grid-template-columns:110px 1fr; }
+      .topbar{ flex-direction:column; align-items:flex-start; }
+      .spark-wrap{ grid-template-columns:repeat(2,1fr); }
+      .status-row{ grid-template-columns:1fr; }
+      .controls{ justify-content:flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginPage" class="login-page">
+    <div class="login-card">
+      <h1>로그인</h1>
+      <p>계정별 권한에 따라 접근 가능한 장비가 구분됩니다.</p>
+
+      <input id="loginUsername" type="text" placeholder="아이디" />
+      <input id="loginPassword" type="password" placeholder="비밀번호" />
+      <button onclick="handleLogin()">로그인</button>
+
+      <div class="login-error" id="loginError"></div>
+
+      <div class="login-hint">
+        예시 계정<br>
+        admin / admin1234<br>
+        user1 / user1234<br>
+        user2 / user1234
+      </div>
+    </div>
+  </section>
+
+  <section id="appShell" class="app-shell hidden">
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <h1>Monitoring Service</h1>
+          <p>CSV 기반 이상 감지 모니터링 / 권한 기반 장비 접근 / 실시간 재생 상태 확인</p>
+        </div>
+
+        <div class="user-box">
+          <div class="user-meta">
+            <div class="name" id="currentUsername">-</div>
+            <div class="role" id="currentUserRole">-</div>
+          </div>
+          <div class="user-actions">
+            <button id="adminPageBtn" class="side-btn hidden" onclick="goAdmin()">관리자</button>
+            <button class="side-btn" onclick="logout()">로그아웃</button>
+          </div>
+        </div>
+
+        <div class="toolbar-side">
+          <input id="deviceSearch" class="search-box" type="text" placeholder="장비 검색 (표시이름 / device id / 파일명)" />
+          <select id="statusFilter" class="filter-select">
+            <option value="ALL">전체 상태</option>
+            <option value="IDLE">IDLE</option>
+            <option value="RUNNING">RUNNING</option>
+            <option value="ALARM">ALARM</option>
+            <option value="STOPPED">STOPPED</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </div>
+
+        <div class="side-summary">
+          <div>내 장비 목록</div>
+          <div>표시 <span id="visibleDeviceCount">0</span></div>
+        </div>
+
+        <div id="deviceList" class="device-list"></div>
+      </aside>
+
+      <main class="main">
+        <div id="mainContent">
+          <div class="topbar">
+            <div class="title">
+              <h2 id="pageTitle">장비 상세 모니터링</h2>
+              <p id="pageSub">장비를 선택하면 실시간 상태를 확인할 수 있습니다.</p>
+            </div>
+
+            <div class="controls">
+              <input id="speedInput" class="speed-input" type="number" step="0.01" value="0.03" min="0.01" />
+              <button class="btn-primary" id="startBtn" onclick="startReplay()">재생 시작</button>
+              <button class="btn-stop" id="stopBtn" onclick="stopReplay()">재생 중지</button>
+            </div>
+          </div>
+
+          <div class="status-row">
+            <div id="alertBanner" class="alert-banner">
+              연속 이상 감지: 현재 장비가 알람 상태입니다.
+            </div>
+
+            <div class="speed-presets">
+              <button class="preset-btn" onclick="setSpeedPreset(0.01)">0.01s</button>
+              <button class="preset-btn" onclick="setSpeedPreset(0.03)">0.03s</button>
+              <button class="preset-btn" onclick="setSpeedPreset(0.05)">0.05s</button>
+              <button class="preset-btn" onclick="setSpeedPreset(0.1)">0.1s</button>
+            </div>
+
+            <div class="conn-badge">
+              <span id="connDot" class="conn-dot conn-disconnected"></span>
+              <span id="connText">연결 안 됨</span>
+            </div>
+          </div>
+
+          <div class="kpi-grid">
+            <div class="panel kpi">
+              <div class="label">표시 이름</div>
+              <div id="deviceDisplayNameKpi" class="value">-</div>
+            </div>
+
+            <div class="panel kpi">
+              <div class="label">장비 ID</div>
+              <div id="deviceIdKpi" class="value">-</div>
+            </div>
+
+            <div class="panel kpi">
+              <div class="label">현재 예측</div>
+              <div id="predMode" class="value">-</div>
+            </div>
+
+            <div class="panel kpi">
+              <div class="label">Confidence</div>
+              <div id="confidence" class="value">-</div>
+            </div>
+
+            <div class="panel kpi">
+              <div class="label">시스템 상태</div>
+              <div id="systemStatusKpi" class="value">IDLE</div>
+            </div>
+          </div>
+
+          <div class="panel kpi" style="margin-bottom:12px; padding:12px 14px;">
+            <div class="label">진행률</div>
+            <div id="progressText" class="value" style="font-size:1rem;">0 / 0</div>
+            <div class="progress-bg">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+          </div>
+
+          <div class="charts-grid">
+            <div class="panel chart-card">
+              <h3>I_meas</h3>
+              <canvas id="chartI" class="main-chart"></canvas>
+            </div>
+            <div class="panel chart-card">
+              <h3>HF_energy</h3>
+              <canvas id="chartHFenergy" class="main-chart"></canvas>
+            </div>
+            <div class="panel chart-card">
+              <h3>HF_rms</h3>
+              <canvas id="chartHFrms" class="main-chart"></canvas>
+            </div>
+            <div class="panel chart-card">
+              <h3>T_meas</h3>
+              <canvas id="chartT" class="main-chart"></canvas>
+            </div>
+          </div>
+
+          <div class="bottom-grid">
+            <div class="panel info-card">
+              <h3>추론 확률 / 현재 센서 상태</h3>
+
+              <div class="prob-row">
+                <div class="prob-head"><span>normal</span><span id="p_normal_text">0.0000</span></div>
+                <div class="prob-bg"><div id="p_normal_bar" class="prob-bar bar-normal"></div></div>
+              </div>
+
+              <div class="prob-row">
+                <div class="prob-head"><span>loose</span><span id="p_loose_text">0.0000</span></div>
+                <div class="prob-bg"><div id="p_loose_bar" class="prob-bar bar-loose"></div></div>
+              </div>
+
+              <div class="prob-row">
+                <div class="prob-head"><span>arc</span><span id="p_arc_text">0.0000</span></div>
+                <div class="prob-bg"><div id="p_arc_bar" class="prob-bar bar-arc"></div></div>
+              </div>
+
+              <div class="prob-row">
+                <div class="prob-head"><span>overcurrent</span><span id="p_overcurrent_text">0.0000</span></div>
+                <div class="prob-bg"><div id="p_overcurrent_bar" class="prob-bar bar-overcurrent"></div></div>
+              </div>
+
+              <div class="sensor-grid">
+                <div class="k">display name</div><div id="displayNameText">-</div>
+                <div class="k">device id</div><div id="deviceIdText">-</div>
+
+                <div class="k">source file</div><div id="sourceFile">-</div>
+                <div class="k">alert count</div><div id="alertCount">0</div>
+
+                <div class="k">row</div><div id="rowIndex">-</div>
+                <div class="k">true mode</div><div id="trueMode">-</div>
+
+                <div class="k">I_meas</div><div id="I_meas">-</div>
+                <div class="k">HF_energy</div><div id="HF_energy">-</div>
+
+                <div class="k">HF_rms</div><div id="HF_rms">-</div>
+                <div class="k">T_meas</div><div id="T_meas">-</div>
+
+                <div class="k">replay interval</div><div id="replayIntervalText">-</div>
+                <div class="k">running</div><div id="runningText">-</div>
+              </div>
+
+              <div id="errorBox" class="error-box"></div>
+            </div>
+
+            <div class="panel table-card">
+              <h3>최근 이벤트 로그</h3>
+              <div class="log-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>row</th>
+                      <th>true</th>
+                      <th>pred</th>
+                      <th>conf</th>
+                      <th>alert</th>
+                      <th>status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historyBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="emptyMain" class="empty-main hidden">
+          접근 가능한 장비가 없습니다.<br>
+          관리자에서 권한을 확인해 주세요.
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <script>
+    const MAX_POINTS = 80;
+
+    let currentDeviceId = null;
+    let ws = null;
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+
+    let devicesCache = [];
+    let sparkCharts = {};
+    let accessToken = null;
+    let currentUser = null;
+    let isBootstrapped = false;
+    let isStarting = false;
+    let isStopping = false;
+
+    function getToken() {
+      return localStorage.getItem("access_token");
+    }
+
+    function setToken(token) {
+      localStorage.setItem("access_token", token);
+      accessToken = token;
+    }
+
+    function clearToken() {
+      localStorage.removeItem("access_token");
+      accessToken = null;
+    }
+
+    function getPreferredName(device) {
+      if (!device) return "-";
+      return device.display_name || device.device_id || "-";
+    }
+
+    async function apiFetch(url, options = {}) {
+      const token = getToken();
+      const headers = {
+        ...(options.headers || {})
+      };
+
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      return fetch(url, {
+        ...options,
+        headers
+      });
+    }
+
+    async function login(username, password) {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "로그인 실패");
+      }
+
+      setToken(data.access_token);
+      return data;
+    }
+
+    async function loadMe() {
+      const res = await apiFetch("/api/auth/me");
+      if (!res.ok) {
+        throw new Error("인증 확인 실패");
+      }
+      return res.json();
+    }
+
+    function showLoginPage() {
+      document.getElementById("loginPage").classList.remove("hidden");
+      document.getElementById("appShell").classList.add("hidden");
+    }
+
+    function showAppShell() {
+      document.getElementById("loginPage").classList.add("hidden");
+      document.getElementById("appShell").classList.remove("hidden");
+    }
+
+    async function handleLogin() {
+      const username = document.getElementById("loginUsername").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const errorEl = document.getElementById("loginError");
+
+      errorEl.innerText = "";
+
+      try {
+        await login(username, password);
+        await bootstrapApp();
+      } catch (err) {
+        errorEl.innerText = err.message || "로그인 실패";
+      }
+    }
+
+    function logout() {
+      clearToken();
+      currentUser = null;
+      currentDeviceId = null;
+      devicesCache = [];
+      stopReconnectTimer();
+
+      if (ws) {
+        try { ws.close(); } catch (_) {}
+        ws = null;
+      }
+
+      setConnectionStatus("disconnected", "연결 안 됨");
+      showLoginPage();
+    }
+
+    function goAdmin() {
+      window.location.href = "/admin";
+    }
+
+    function setConnectionStatus(status, text) {
+      const dot = document.getElementById("connDot");
+      const label = document.getElementById("connText");
+
+      dot.className = "conn-dot";
+      if (status === "connected") dot.classList.add("conn-connected");
+      else if (status === "connecting") dot.classList.add("conn-connecting");
+      else dot.classList.add("conn-disconnected");
+
+      label.innerText = text;
+    }
+
+    function createLineChart(canvasId, label, borderColor) {
+      const ctx = document.getElementById(canvasId).getContext("2d");
+      return new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            label,
+            data: [],
+            borderColor,
+            borderWidth: 2,
+            tension: 0.18,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#dbe4f8" } }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#94a4c6", maxTicksLimit: 8 },
+              grid: { color: "rgba(255,255,255,.05)" }
+            },
+            y: {
+              ticks: { color: "#94a4c6", maxTicksLimit: 6 },
+              grid: { color: "rgba(255,255,255,.05)" }
+            }
+          }
+        }
+      });
+    }
+
+    function createSparkChart(canvas, color) {
+      const ctx = canvas.getContext("2d");
+      return new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            data: [],
+            borderColor: color,
+            borderWidth: 1.6,
+            tension: 0.22,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: {
+            x: { display: false },
+            y: { display: false }
+          },
+          elements: {
+            line: { fill: false }
+          }
+        }
+      });
+    }
+
+    const chartI = createLineChart("chartI", "I_meas", "#58a6ff");
+    const chartHFenergy = createLineChart("chartHFenergy", "HF_energy", "#39c6d6");
+    const chartHFrms = createLineChart("chartHFrms", "HF_rms", "#f2c94c");
+    const chartT = createLineChart("chartT", "T_meas", "#ff9d43");
+
+    function pushChart(chart, x, y) {
+      chart.data.labels.push(x);
+      chart.data.datasets[0].data.push(y);
+
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+
+      chart.update();
+    }
+
+    function resetCharts() {
+      [chartI, chartHFenergy, chartHFrms, chartT].forEach(chart => {
+        chart.data.labels = [];
+        chart.data.datasets[0].data = [];
+        chart.update();
+      });
+    }
+
+    function setProbBar(prefix, value) {
+      const pct = Math.max(0, Math.min(100, value * 100));
+      document.getElementById(`${prefix}_bar`).style.width = `${pct}%`;
+      document.getElementById(`${prefix}_text`).innerText = value.toFixed(4);
+    }
+
+    function getPredClass(name) {
+      if (name === "normal") return "state-normal";
+      if (name === "loose") return "state-loose";
+      if (name === "arc") return "state-arc";
+      if (name === "overcurrent") return "state-overcurrent";
+      return "";
+    }
+
+    function getStatusClass(status) {
+      if (status === "RUNNING") return "running";
+      if (status === "ALARM") return "alarm";
+      if (status === "STOPPED") return "stopped";
+      if (status === "ERROR") return "error";
+      return "idle";
+    }
+
+    function getDotClass(status) {
+      if (status === "RUNNING") return "dot-running";
+      if (status === "ALARM") return "dot-alarm";
+      if (status === "STOPPED") return "dot-stopped";
+      if (status === "ERROR") return "dot-error";
+      return "dot-idle";
+    }
+
+    function predPill(name) {
+      if (!name) return "-";
+
+      const cls = name === "normal" ? "pred-normal-row"
+        : name === "loose" ? "pred-loose-row"
+        : name === "arc" ? "pred-arc-row"
+        : "pred-overcurrent-row";
+
+      return `<span class="pred-pill ${cls}">${escapeHtml(name)}</span>`;
+    }
+
+    function predBadge(name) {
+      if (!name) return `<span class="pred-badge pred-none">-</span>`;
+
+      const cls = name === "normal" ? "pred-normal"
+        : name === "loose" ? "pred-loose"
+        : name === "arc" ? "pred-arc"
+        : "pred-overcurrent";
+
+      return `<span class="pred-badge ${cls}">${escapeHtml(name)}</span>`;
+    }
+
+    function getFilteredDevices() {
+      const keyword = document.getElementById("deviceSearch").value.trim().toLowerCase();
+      const status = document.getElementById("statusFilter").value;
+
+      return devicesCache.filter(d => {
+        const keywordOk =
+          !keyword ||
+          (d.display_name || "").toLowerCase().includes(keyword) ||
+          (d.device_id || "").toLowerCase().includes(keyword) ||
+          (d.source_file || "").toLowerCase().includes(keyword);
+
+        const statusOk = status === "ALL" || d.system_status === status;
+        return keywordOk && statusOk;
+      });
+    }
+
+    async function loadDevices() {
+      const res = await apiFetch("/api/devices");
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        throw new Error("장비 목록 로드 실패");
+      }
+
+      const data = await res.json();
+      devicesCache = data.devices || [];
+      renderDeviceList();
+
+      if (devicesCache.length === 0) {
+        showEmptyMain(true);
+        clearMainFields();
+        return;
+      }
+
+      showEmptyMain(false);
+
+      if (!currentDeviceId || !devicesCache.find(d => d.device_id === currentDeviceId)) {
+        selectDevice(devicesCache[0].device_id);
+      }
+    }
+
+    function renderDeviceList() {
+      const wrap = document.getElementById("deviceList");
+      wrap.innerHTML = "";
+
+      const filtered = getFilteredDevices();
+      document.getElementById("visibleDeviceCount").innerText = filtered.length;
+
+      if (filtered.length === 0) {
+        wrap.innerHTML = `<div class="empty-side">표시할 장비가 없습니다.</div>`;
+        return;
+      }
+
+      filtered.forEach(d => {
+        const div = document.createElement("div");
+        div.className = `panel device-card ${currentDeviceId === d.device_id ? "active" : ""}`;
+        div.onclick = () => selectDevice(d.device_id);
+
+        const predName = d.latest_prediction?.pred_mode_name || null;
+        const current = d.current_row ?? 0;
+        const total = d.total_rows ?? 0;
+        const ratio = total > 0 ? (current / total) * 100 : 0;
+        const preferredName = getPreferredName(d);
+
+        div.innerHTML = `
+          <div class="device-top">
+            <div class="device-left">
+              <div class="status-dot ${getDotClass(d.system_status)}"></div>
+              <div class="device-name-wrap">
+                <div class="device-display-name">${escapeHtml(preferredName)}</div>
+                <div class="device-id-sub">${escapeHtml(d.device_id || "-")}</div>
+              </div>
+            </div>
+            <div class="status-pill ${getStatusClass(d.system_status)}">${escapeHtml(d.system_status || "IDLE")}</div>
+          </div>
+
+          <div class="device-sub">${escapeHtml(d.source_file || "-")}</div>
+
+          <div class="device-meta">
+            <div>Alert<strong>${d.alert_count ?? 0}</strong></div>
+            <div>Progress<strong>${current}/${total}</strong></div>
+          </div>
+
+          <div class="mini-progress-text">
+            <span>재생 진행률</span>
+            <span>${ratio.toFixed(0)}%</span>
+          </div>
+          <div class="mini-progress-bg">
+            <div class="mini-progress-bar" style="width:${ratio}%"></div>
+          </div>
+
+          <div class="device-footer">
+            ${predBadge(predName)}
+            <div class="alert-mini ${d.alert_active ? "on" : ""}">
+              ${d.alert_active ? "ALERT ON" : "NORMAL"}
+            </div>
+          </div>
+
+          <div class="spark-wrap">
+            <div class="spark-box"><canvas id="spark-${escapeAttrId(d.device_id)}-i"></canvas></div>
+            <div class="spark-box"><canvas id="spark-${escapeAttrId(d.device_id)}-e"></canvas></div>
+            <div class="spark-box"><canvas id="spark-${escapeAttrId(d.device_id)}-r"></canvas></div>
+            <div class="spark-box"><canvas id="spark-${escapeAttrId(d.device_id)}-t"></canvas></div>
+          </div>
+        `;
+
+        wrap.appendChild(div);
+
+        requestAnimationFrame(() => {
+          renderSparkForDevice(d);
+        });
+      });
+    }
+
+    function renderSparkForDevice(device) {
+      const safeId = escapeAttrId(device.device_id);
+      const defs = [
+        { key: "I_meas", suffix: "i", color: "#58a6ff" },
+        { key: "HF_energy", suffix: "e", color: "#39c6d6" },
+        { key: "HF_rms", suffix: "r", color: "#f2c94c" },
+        { key: "T_meas", suffix: "t", color: "#ff9d43" }
+      ];
+
+      defs.forEach(def => {
+        const canvasId = `spark-${safeId}-${def.suffix}`;
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        if (!sparkCharts[canvasId]) {
+          sparkCharts[canvasId] = createSparkChart(canvas, def.color);
+        }
+
+        const values = (device.sparks && device.sparks[def.key]) ? device.sparks[def.key] : [];
+        const chart = sparkCharts[canvasId];
+        chart.data.labels = values.map((_, idx) => idx);
+        chart.data.datasets[0].data = values;
+        chart.update();
+      });
+    }
+
+    function selectDevice(deviceId) {
+      currentDeviceId = deviceId;
+      renderDeviceList();
+      resetCharts();
+      document.getElementById("historyBody").innerHTML = "";
+      clearPrediction();
+      connectDevice();
+      fetchDeviceLatest();
+    }
+
+    async function fetchDeviceLatest() {
+      if (!currentDeviceId) return;
+
+      const res = await apiFetch(`/api/devices/${currentDeviceId}/latest`);
+      if (!res.ok) {
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+        throw new Error("장비 상세 조회 실패");
+      }
+
+      const data = await res.json();
+      applyStatus(data, true);
+    }
+
+    function stopReconnectTimer() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+    }
+
+    function scheduleReconnect() {
+      stopReconnectTimer();
+      reconnectAttempts += 1;
+      const delay = Math.min(1000 * reconnectAttempts, 5000);
+
+      setConnectionStatus("connecting", `재연결 중... (${(delay / 1000).toFixed(1)}s)`);
+
+      reconnectTimer = setTimeout(() => {
+        connectDevice(true);
+      }, delay);
+    }
+
+    function connectDevice(isReconnect = false) {
+      if (!currentDeviceId) return;
+
+      stopReconnectTimer();
+
+      if (ws) {
+        try { ws.close(); } catch (_) {}
+        ws = null;
+      }
+
+      const token = getToken();
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const url = `${protocol}://${location.host}/ws/${encodeURIComponent(currentDeviceId)}?token=${encodeURIComponent(token)}`;
+
+      setConnectionStatus("connecting", isReconnect ? "재연결 시도 중..." : "연결 중...");
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        reconnectAttempts = 0;
+        setConnectionStatus("connected", "실시간 연결됨");
+      };
+
+      ws.onerror = () => {
+        setConnectionStatus("disconnected", "연결 오류");
+      };
+
+      ws.onclose = () => {
+        setConnectionStatus("disconnected", "연결 끊김");
+        if (currentDeviceId) {
+          scheduleReconnect();
+        }
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "status") {
+          applyStatus(data, true);
+        } else if (data.type === "update") {
+          applyUpdate(data);
+        } else if (data.type === "error") {
+          showError(data.message || "알 수 없는 오류");
+        }
+      };
+    }
+
+    function applyStatus(data, resetHistory = false) {
+      showEmptyMain(false);
+
+      const preferredName = getPreferredName(data);
+
+      document.getElementById("deviceDisplayNameKpi").innerText = preferredName;
+      document.getElementById("deviceIdKpi").innerText = data.device_id || "-";
+      document.getElementById("displayNameText").innerText = preferredName;
+      document.getElementById("deviceIdText").innerText = data.device_id || "-";
+      document.getElementById("sourceFile").innerText = data.source_file || "-";
+      document.getElementById("systemStatusKpi").innerText = data.system_status || "IDLE";
+      document.getElementById("alertCount").innerText = data.alert_count ?? 0;
+      document.getElementById("replayIntervalText").innerText = data.replay_interval ?? "-";
+      document.getElementById("runningText").innerText = data.running ? "true" : "false";
+
+      document.getElementById("pageTitle").innerText = `${preferredName} 상세 모니터링`;
+      document.getElementById("pageSub").innerText = `device_id: ${data.device_id || "-"} / source: ${data.source_file || "-"}`;
+
+      const current = data.current_row ?? 0;
+      const total = data.total_rows ?? 0;
+      document.getElementById("progressText").innerText = `${current} / ${total}`;
+
+      const ratio = total > 0 ? (current / total) * 100 : 0;
+      document.getElementById("progressBar").style.width = `${ratio}%`;
+
+      document.getElementById("alertBanner").style.display = data.alert_active ? "block" : "none";
+
+      if (data.latest_sensor) updateSensor(data.latest_sensor);
+      else clearSensorFields();
+
+      if (data.latest_prediction) updatePrediction(data.latest_prediction);
+      else clearPrediction();
+
+      if (resetHistory) {
+        const body = document.getElementById("historyBody");
+        body.innerHTML = "";
+        (data.history || []).slice(-25).reverse().forEach(addHistoryRow);
+      }
+
+      if (data.last_error) showError(data.last_error);
+      else hideError();
+
+      updateControlButtons(data.running);
+      refreshDeviceSummaryCache(data);
+    }
+
+    function applyUpdate(data) {
+      if (data.display_name) {
+        document.getElementById("deviceDisplayNameKpi").innerText = data.display_name;
+        document.getElementById("displayNameText").innerText = data.display_name;
+        document.getElementById("pageTitle").innerText = `${data.display_name} 상세 모니터링`;
+      }
+
+      document.getElementById("systemStatusKpi").innerText = data.system_status || "-";
+      document.getElementById("alertCount").innerText = data.alert_count ?? 0;
+      document.getElementById("runningText").innerText = "true";
+
+      const current = data.current_row ?? 0;
+      const total = data.total_rows ?? 0;
+      document.getElementById("progressText").innerText = `${current} / ${total}`;
+
+      const ratio = total > 0 ? (current / total) * 100 : 0;
+      document.getElementById("progressBar").style.width = `${ratio}%`;
+
+      document.getElementById("alertBanner").style.display = data.alert_active ? "block" : "none";
+
+      if (data.sensor) updateSensor(data.sensor);
+      if (data.prediction) updatePrediction(data.prediction);
+      if (data.history_item) addHistoryRow(data.history_item, true);
+
+      hideError();
+      updateControlButtons(true);
+
+      refreshDeviceSummaryCache({
+        device_id: data.device_id,
+        display_name: data.display_name,
+        running: true,
+        system_status: data.system_status,
+        alert_active: data.alert_active,
+        alert_count: data.alert_count,
+        current_row: data.current_row,
+        total_rows: data.total_rows,
+        latest_prediction: data.prediction,
+        sparks: data.sparks
+      });
+    }
+
+    function refreshDeviceSummaryCache(partial) {
+      const idx = devicesCache.findIndex(d => d.device_id === partial.device_id);
+      if (idx >= 0) {
+        devicesCache[idx] = { ...devicesCache[idx], ...partial };
+        renderDeviceList();
+      }
+    }
+
+    function updateSensor(sensor) {
+      document.getElementById("rowIndex").innerText = sensor.row_index ?? "-";
+      document.getElementById("trueMode").innerText = sensor.mode ?? "-";
+      document.getElementById("I_meas").innerText = sensor.I_meas != null ? Number(sensor.I_meas).toFixed(4) : "-";
+      document.getElementById("HF_energy").innerText = sensor.HF_energy != null ? Number(sensor.HF_energy).toFixed(6) : "-";
+      document.getElementById("HF_rms").innerText = sensor.HF_rms != null ? Number(sensor.HF_rms).toFixed(4) : "-";
+      document.getElementById("T_meas").innerText = sensor.T_meas != null ? Number(sensor.T_meas).toFixed(4) : "-";
+
+      if (sensor.row_index != null && sensor.I_meas != null) pushChart(chartI, sensor.row_index, sensor.I_meas);
+      if (sensor.row_index != null && sensor.HF_energy != null) pushChart(chartHFenergy, sensor.row_index, sensor.HF_energy);
+      if (sensor.row_index != null && sensor.HF_rms != null) pushChart(chartHFrms, sensor.row_index, sensor.HF_rms);
+      if (sensor.row_index != null && sensor.T_meas != null) pushChart(chartT, sensor.row_index, sensor.T_meas);
+    }
+
+    function clearSensorFields() {
+      document.getElementById("rowIndex").innerText = "-";
+      document.getElementById("trueMode").innerText = "-";
+      document.getElementById("I_meas").innerText = "-";
+      document.getElementById("HF_energy").innerText = "-";
+      document.getElementById("HF_rms").innerText = "-";
+      document.getElementById("T_meas").innerText = "-";
+    }
+
+    function updatePrediction(pred) {
+      const predEl = document.getElementById("predMode");
+      predEl.innerText = pred.pred_mode_name || "-";
+      predEl.className = `value ${getPredClass(pred.pred_mode_name)}`;
+
+      document.getElementById("confidence").innerText =
+        pred.confidence != null ? Number(pred.confidence).toFixed(4) : "-";
+
+      setProbBar("p_normal", pred.probabilities?.normal ?? 0);
+      setProbBar("p_loose", pred.probabilities?.loose ?? 0);
+      setProbBar("p_arc", pred.probabilities?.arc ?? 0);
+      setProbBar("p_overcurrent", pred.probabilities?.overcurrent ?? 0);
+    }
+
+    function clearPrediction() {
+      document.getElementById("predMode").innerText = "-";
+      document.getElementById("predMode").className = "value";
+      document.getElementById("confidence").innerText = "-";
+      setProbBar("p_normal", 0);
+      setProbBar("p_loose", 0);
+      setProbBar("p_arc", 0);
+      setProbBar("p_overcurrent", 0);
+    }
+
+    function addHistoryRow(item, prepend = false) {
+      const body = document.getElementById("historyBody");
+      const tr = document.createElement("tr");
+
+      tr.innerHTML = `
+        <td>${item.row_index ?? "-"}</td>
+        <td>${item.true_mode ?? "-"}</td>
+        <td>${predPill(item.pred_mode_name)}</td>
+        <td>${item.confidence != null ? Number(item.confidence).toFixed(4) : "-"}</td>
+        <td>${item.alert_active ? "ON" : "-"}</td>
+        <td>${escapeHtml(item.system_status ?? "-")}</td>
+      `;
+
+      if (prepend) body.prepend(tr);
+      else body.appendChild(tr);
+
+      while (body.children.length > 25) {
+        body.removeChild(body.lastChild);
+      }
+    }
+
+    function showError(message) {
+      const box = document.getElementById("errorBox");
+      box.style.display = "block";
+      box.innerText = message;
+    }
+
+    function hideError() {
+      const box = document.getElementById("errorBox");
+      box.style.display = "none";
+      box.innerText = "";
+    }
+
+    function updateControlButtons(running) {
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+
+      startBtn.disabled = isStarting || running || !currentDeviceId;
+      stopBtn.disabled = isStopping || !running || !currentDeviceId;
+
+      startBtn.style.opacity = startBtn.disabled ? ".6" : "1";
+      stopBtn.style.opacity = stopBtn.disabled ? ".6" : "1";
+    }
+
+    async function startReplay() {
+      if (!currentDeviceId || isStarting) return;
+
+      isStarting = true;
+      updateControlButtons(false);
+
+      try {
+        resetCharts();
+        document.getElementById("historyBody").innerHTML = "";
+        hideError();
+
+        const replayInterval = parseFloat(document.getElementById("speedInput").value);
+
+        const res = await apiFetch(`/api/devices/${currentDeviceId}/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ replay_interval: replayInterval })
+        });
+
+        const data = await res.json();
+
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(data.detail || data.message || "재생 시작 실패");
+        }
+
+        document.getElementById("replayIntervalText").innerText = data.replay_interval ?? replayInterval;
+        document.getElementById("runningText").innerText = "true";
+      } catch (err) {
+        showError(err.message || "재생 시작 중 오류가 발생했습니다.");
+      } finally {
+        isStarting = false;
+        updateControlButtons(false);
+      }
+    }
+
+    async function stopReplay() {
+      if (!currentDeviceId || isStopping) return;
+
+      isStopping = true;
+      updateControlButtons(true);
+
+      try {
+        const res = await apiFetch(`/api/devices/${currentDeviceId}/stop`, {
+          method: "POST"
+        });
+
+        const data = await res.json();
+
+        if (res.status === 401) {
+          logout();
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(data.detail || data.message || "재생 중지 실패");
+        }
+
+        document.getElementById("runningText").innerText = "false";
+      } catch (err) {
+        showError(err.message || "재생 중지 중 오류가 발생했습니다.");
+      } finally {
+        isStopping = false;
+        updateControlButtons(false);
+      }
+    }
+
+    function bindSidebarFilters() {
+      if (isBootstrapped) return;
+
+      document.getElementById("deviceSearch").addEventListener("input", renderDeviceList);
+      document.getElementById("statusFilter").addEventListener("change", renderDeviceList);
+      isBootstrapped = true;
+    }
+
+    function setSpeedPreset(value) {
+      document.getElementById("speedInput").value = value.toFixed(2);
+    }
+
+    function showEmptyMain(show) {
+      document.getElementById("mainContent").classList.toggle("hidden", show);
+      document.getElementById("emptyMain").classList.toggle("hidden", !show);
+    }
+
+    function clearMainFields() {
+      document.getElementById("pageTitle").innerText = "장비 상세 모니터링";
+      document.getElementById("pageSub").innerText = "장비를 선택하면 실시간 상태를 확인할 수 있습니다.";
+      document.getElementById("deviceDisplayNameKpi").innerText = "-";
+      document.getElementById("deviceIdKpi").innerText = "-";
+      document.getElementById("displayNameText").innerText = "-";
+      document.getElementById("deviceIdText").innerText = "-";
+      document.getElementById("sourceFile").innerText = "-";
+      document.getElementById("systemStatusKpi").innerText = "IDLE";
+      document.getElementById("alertCount").innerText = "0";
+      document.getElementById("replayIntervalText").innerText = "-";
+      document.getElementById("runningText").innerText = "-";
+      document.getElementById("progressText").innerText = "0 / 0";
+      document.getElementById("progressBar").style.width = "0%";
+      document.getElementById("alertBanner").style.display = "none";
+      document.getElementById("historyBody").innerHTML = "";
+      clearSensorFields();
+      clearPrediction();
+      hideError();
+      resetCharts();
+      updateControlButtons(false);
+    }
+
+    async function bootstrapApp() {
+      try {
+        currentUser = await loadMe();
+
+        document.getElementById("currentUsername").innerText = currentUser.username;
+        document.getElementById("currentUserRole").innerText =
+          currentUser.is_admin ? "관리자" : "일반 사용자";
+
+        document.getElementById("adminPageBtn").classList.toggle("hidden", !currentUser.is_admin);
+
+        showAppShell();
+        bindSidebarFilters();
+        await loadDevices();
+      } catch (err) {
+        console.error(err);
+        logout();
+      }
+    }
+
+    async function bootstrap() {
+      accessToken = getToken();
+
+      if (!accessToken) {
+        showLoginPage();
+        return;
+      }
+
+      await bootstrapApp();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function escapeAttrId(value) {
+      return String(value ?? "").replace(/[^a-zA-Z0-9_-]/g, "_");
+    }
+
+    window.addEventListener("beforeunload", () => {
+      stopReconnectTimer();
+      if (ws) {
+        try { ws.close(); } catch (_) {}
+      }
+    });
+
+    window.addEventListener("load", bootstrap);
+  </script>
+</body>
+</html>
