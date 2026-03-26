@@ -31,12 +31,14 @@ class HybridGRURuntimeInferencer:
         num_layers: int = 2,
         dropout: float = 0.0,
         num_classes: int = 4,
+        debug: bool = False,
     ):
         self.window = window
         self.stride = stride
         self.seq_input_dim = seq_input_dim
         self.feat_input_dim = feat_input_dim
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.debug = debug
 
         with open(seq_scaler_path, "rb") as f:
             self.seq_scaler = pickle.load(f)
@@ -80,29 +82,42 @@ class HybridGRURuntimeInferencer:
 
     def _make_window_feat(self, x_seq: np.ndarray) -> np.ndarray:
         """
+        학습 코드와 동일한 engineered feature 생성
+
         x_seq shape: [T, 4]
+        columns: [I_meas, HF_energy, HF_rms, T_meas]
 
-        일단 체크포인트 차원(11)에 맞추기 위한 feature 구성:
-        - mean(4)
-        - std(4)
-        - max(2) : I_meas, HF_energy
-        - 마지막 T_meas(1)
-
-        총 11개
+        return shape: [11]
         """
-        mean_feat = np.mean(x_seq, axis=0)      # 4
-        std_feat = np.std(x_seq, axis=0)        # 4
-        max_i = np.max(x_seq[:, 0])             # 1
-        max_hf_energy = np.max(x_seq[:, 1])     # 1
-        last_t = x_seq[-1, 3]                   # 1
+        I = x_seq[:, 0]
+        HF_energy = x_seq[:, 1]
+        HF_rms = x_seq[:, 2]
+        T = x_seq[:, 3]
 
-        feat = np.concatenate([
-            mean_feat,
-            std_feat,
-            np.array([max_i, max_hf_energy, last_t], dtype=np.float32)
-        ], axis=0)  # 총 11개
+        dT = np.diff(T, prepend=T[0])
 
-        return feat.astype(np.float32)
+        feats = [
+            I.mean(),
+            I.std(),
+            np.sqrt(np.mean(I ** 2)),   # I RMS
+            HF_energy.mean(),
+            HF_energy.std(),
+            HF_energy.max(),
+            HF_rms.mean(),
+            HF_rms.std(),
+            T.mean(),
+            dT.mean(),
+            dT.max(),
+        ]
+        feat = np.array(feats, dtype=np.float32)
+
+        if feat.shape[0] != self.feat_input_dim:
+            raise ValueError(
+                f"Feature dimension mismatch: got {feat.shape[0]}, "
+                f"expected {self.feat_input_dim}"
+            )
+
+        return feat
 
     def step(self, sensor: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         seq_feature = self._make_seq_feature(sensor)
@@ -116,8 +131,8 @@ class HybridGRURuntimeInferencer:
         if (self.step_count - self.window) % self.stride != 0:
             return self.last_pred
 
-        x_seq = np.array(self.buffer, dtype=np.float32)          # [T, 4]
-        x_feat = self._make_window_feat(x_seq)                   # [11]
+        x_seq = np.array(self.buffer, dtype=np.float32)   # [T, 4]
+        x_feat = self._make_window_feat(x_seq)            # [11]
 
         x_seq_scaled = self.seq_scaler.transform(x_seq)          # [T, 4]
         x_feat_scaled = self.feat_scaler.transform([x_feat])[0]  # [11]
@@ -136,6 +151,15 @@ class HybridGRURuntimeInferencer:
         pred = int(pred.item())
         conf = float(conf.item())
         probs_np = probs.detach().cpu().numpy()
+
+        if self.debug:
+            print("=" * 80)
+            print("DEBUG RAW seq last row:", x_seq[-1])
+            print("DEBUG RAW feat:", x_feat)
+            print("DEBUG SCALED seq min/max:", float(x_seq_scaled.min()), float(x_seq_scaled.max()))
+            print("DEBUG SCALED feat:", x_feat_scaled[0])
+            print("DEBUG LOGITS:", logits.detach().cpu().numpy()[0])
+            print("DEBUG PROBS:", probs_np, "pred:", pred)
 
         result = {
             "pred_mode": pred,
