@@ -151,6 +151,7 @@ class DeviceRuntime:
 
         self.running = False
         self.device_mode = "csv"        # "csv" | "realtime"
+        self.device_type = "csv"        # DB의 device_type (csv | realtime)
         self.latest_sensor = None
         self.latest_prediction = None
         self.history = deque(maxlen=MAX_HISTORY)
@@ -201,6 +202,7 @@ class DeviceRuntime:
             "source_file":       self.source_file,
             "running":           self.running,
             "device_mode":       self.device_mode,
+            "device_type":       self.device_type,
             "system_status":     self.system_status,
             "alert_active":      self.alert_active,
             "alert_count":       self.alert_count,
@@ -218,6 +220,7 @@ class DeviceRuntime:
             "source_file":       self.source_file,
             "running":           self.running,
             "device_mode":       self.device_mode,
+            "device_type":       self.device_type,
             "system_status":     self.system_status,
             "alert_active":      self.alert_active,
             "alert_count":       self.alert_count,
@@ -311,12 +314,14 @@ def load_devices_from_db(db: Session):
         csv_path = os.path.join(CSV_DIR, row.source_file)
         if not os.path.exists(csv_path):
             continue
-        devices[row.device_id] = DeviceRuntime(
+        rt = DeviceRuntime(
             device_id=row.device_id,
             csv_path=csv_path,
             source_file=row.source_file,
             display_name=row.display_name or row.device_id,
         )
+        rt.device_type = getattr(row, "device_type", "csv") or "csv"
+        devices[row.device_id] = rt
 
 
 def sync_devices_with_csv_and_db(db: Session):
@@ -335,6 +340,7 @@ def sync_devices_with_csv_and_db(db: Session):
             device_id=device_id,
             source_file=filename,
             display_name=device_id,
+            device_type="csv",
         )
         db.add(new_device)
 
@@ -943,6 +949,84 @@ async def admin_update_device_display_name(
             "display_name": device_row.display_name,
             "created_at":   device_row.created_at.isoformat() if device_row.created_at else None,
             "updated_at":   device_row.updated_at.isoformat() if device_row.updated_at else None,
+        }
+    }
+
+
+@app.put("/api/admin/devices/{device_id}/type")
+async def admin_update_device_type(
+    device_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """장비 타입 토글 (csv ↔ realtime)"""
+    ensure_admin(current_user)
+    device_row = get_device_db_row(db, device_id)
+    if not device_row:
+        raise HTTPException(status_code=404, detail="장비를 찾을 수 없습니다.")
+
+    current_type = getattr(device_row, "device_type", "csv") or "csv"
+    new_type = "realtime" if current_type == "csv" else "csv"
+    device_row.device_type = new_type
+    db.commit()
+    db.refresh(device_row)
+
+    if device_id in devices:
+        devices[device_id].device_type = new_type
+
+    return {
+        "ok": True,
+        "device_id": device_id,
+        "device_type": new_type,
+    }
+
+
+@app.post("/api/admin/devices/register-realtime")
+async def admin_register_realtime_device(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    실시간 센서 장비를 새로 등록합니다.
+    CSV 파일 없이 device_type=realtime으로 등록됩니다.
+    """
+    ensure_admin(current_user)
+
+    existing_rows = db.query(Device).order_by(Device.id.asc()).all()
+    next_index = len(existing_rows) + 1
+    device_id = f"sensor_{next_index:03d}"
+
+    # device_id 중복 방지
+    while db.query(Device).filter(Device.device_id == device_id).first():
+        next_index += 1
+        device_id = f"sensor_{next_index:03d}"
+
+    new_device = Device(
+        device_id=device_id,
+        source_file="realtime",
+        display_name=device_id,
+        device_type="realtime",
+    )
+    db.add(new_device)
+    db.commit()
+    db.refresh(new_device)
+
+    # DeviceRuntime 생성 (CSV 없이)
+    rt = DeviceRuntime(
+        device_id=new_device.device_id,
+        csv_path="",
+        source_file="realtime",
+        display_name=new_device.display_name,
+    )
+    rt.device_type = "realtime"
+    devices[new_device.device_id] = rt
+
+    return {
+        "ok": True,
+        "device": {
+            "device_id":   new_device.device_id,
+            "display_name":new_device.display_name,
+            "device_type": new_device.device_type,
         }
     }
 
