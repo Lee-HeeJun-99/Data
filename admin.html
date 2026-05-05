@@ -317,6 +317,29 @@
           </div>
         </div>
 
+        <div class="grid-2" style="margin-top:14px;">
+          <div class="card panel">
+            <h3>실시간 센서 장비 등록</h3>
+            <p class="muted small">CSV 파일 없이 실제 센서 데이터를 받을 장비를 새로 등록합니다.</p>
+            <div class="actions">
+              <button class="primary-btn" onclick="registerRealtimeDevice()">실시간 장비 등록</button>
+            </div>
+            <div id="registerRealtimeMsg" class="message"></div>
+          </div>
+
+          <div class="card panel">
+            <h3>장비 타입 변경</h3>
+            <p class="muted small">장비 타입을 CSV ↔ 실시간으로 전환합니다.</p>
+            <div class="form-grid">
+              <select id="deviceTypeSelect" class="full"></select>
+            </div>
+            <div class="actions">
+              <button class="primary-btn" onclick="toggleDeviceType()">타입 전환</button>
+            </div>
+            <div id="deviceTypeMsg" class="message"></div>
+          </div>
+        </div>
+
         <div class="card panel" style="margin-top:14px;">
           <h3>장비 목록</h3>
           <div id="devicesList" class="list"></div>
@@ -535,19 +558,32 @@
     function renderDevices(){
       const wrap = document.getElementById('devicesList');
       if (!devicesCache.length){ wrap.innerHTML = '<div class="empty">등록된 장비가 없습니다.</div>'; return; }
-      wrap.innerHTML = devicesCache.map(d => `
-        <div class="row-card">
+      wrap.innerHTML = devicesCache.map(d => {
+        const isRealtime = d.device_type === 'realtime';
+        const typePill = isRealtime
+          ? `<span class="pill" style="background:rgba(204,68,255,.16);color:#cc44ff">실시간</span>`
+          : `<span class="pill ok">CSV</span>`;
+        return `
+        <div class="row-card" style="${isRealtime ? 'border-color:rgba(204,68,255,.3)' : ''}">
           <div class="row-top">
             <div>
               <div class="row-title">${escapeHtml(d.display_name||d.device_id)}</div>
               <div class="row-sub">${escapeHtml(d.device_id)} · ${escapeHtml(d.source_file||'-')}</div>
             </div>
-            <span class="pill ok">DEVICE</span>
+            ${typePill}
           </div>
           <div class="row-sub">created: ${escapeHtml(d.created_at||'-')}</div>
           <div class="row-sub">updated: ${escapeHtml(d.updated_at||'-')}</div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
+
+      // 타입 변경 셀렉트 채우기
+      const sel = document.getElementById('deviceTypeSelect');
+      if (sel) {
+        sel.innerHTML = devicesCache.map(d =>
+          `<option value="${escapeHtmlAttr(d.device_id)}">${escapeHtml(d.display_name||d.device_id)} [${d.device_type||'csv'}]</option>`
+        ).join('');
+      }
     }
 
     // ===================== 사용자 액션 =====================
@@ -662,6 +698,29 @@
     }
 
     // ===================== 유틸 =====================
+    // ===================== 장비 타입 관련 =====================
+    async function registerRealtimeDevice(){
+      try{
+        const res  = await apiFetch('/api/admin/devices/register-realtime', { method:'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '실시간 장비 등록 실패');
+        setMessage('registerRealtimeMsg', `장비가 등록되었습니다. (${data.device.device_id})`);
+        await refreshAll();
+      }catch(err){ setMessage('registerRealtimeMsg', err.message, true); }
+    }
+
+    async function toggleDeviceType(){
+      const deviceId = document.getElementById('deviceTypeSelect').value;
+      if (!deviceId){ setMessage('deviceTypeMsg', '장비를 선택하세요.', true); return; }
+      try{
+        const res  = await apiFetch(`/api/admin/devices/${encodeURIComponent(deviceId)}/type`, { method:'PUT' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || '타입 변경 실패');
+        setMessage('deviceTypeMsg', `${deviceId} → ${data.device_type} 으로 변경되었습니다.`);
+        await refreshAll();
+      }catch(err){ setMessage('deviceTypeMsg', err.message, true); }
+    }
+
     function escapeHtml(value){
       return String(value??'')
         .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
