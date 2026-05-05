@@ -54,6 +54,8 @@ class Device(TimestampMixin, Base):
     device_id = Column(String, unique=True, index=True, nullable=False)
     source_file = Column(String, nullable=False)
     display_name = Column(String, nullable=True)
+    device_type = Column(String, default="csv", nullable=False)
+    # device_type: "csv" = 가상 데이터(CSV 재생), "realtime" = 실제 센서 장비
 
     permissions = relationship(
         "UserDevicePermission",
@@ -64,7 +66,8 @@ class Device(TimestampMixin, Base):
     def __repr__(self):
         return (
             f"Device(id={self.id}, device_id='{self.device_id}', "
-            f"source_file='{self.source_file}', display_name='{self.display_name}')"
+            f"source_file='{self.source_file}', display_name='{self.display_name}', "
+            f"device_type='{self.device_type}')"
         )
 
 
