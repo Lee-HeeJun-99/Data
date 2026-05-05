@@ -69,7 +69,8 @@ def create_device_if_not_exists(
     device = Device(
         device_id=device_id,
         source_file=source_file,
-        display_name=display_name or device_id
+        display_name=display_name or device_id,
+        device_type="csv",
     )
     db.add(device)
     db.commit()
