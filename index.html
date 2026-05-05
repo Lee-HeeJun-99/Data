@@ -175,6 +175,16 @@
       box-shadow:var(--shadow); backdrop-filter:blur(8px);
     }
 
+    /* ===================== 장비 타입 탭 ===================== */
+    .type-tabs{ display:flex; gap:6px; margin-bottom:10px; }
+    .type-tab{
+      flex:1; padding:7px 6px; border-radius:10px; border:1px solid var(--line);
+      background:rgba(255,255,255,.04); color:var(--muted); font-size:.78rem;
+      font-weight:700; cursor:pointer; text-align:center; transition:.15s ease;
+    }
+    .type-tab.active{ background:linear-gradient(180deg,rgba(92,201,255,.16),rgba(92,201,255,.06)); border-color:var(--line-strong); color:var(--text); }
+    .type-tab.realtime-tab.active{ background:linear-gradient(180deg,rgba(204,68,255,.16),rgba(204,68,255,.06)); border-color:rgba(204,68,255,.4); color:#cc44ff; }
+
     /* ===================== 장비 목록 ===================== */
     .device-list{
       display:flex; flex-direction:column; gap:10px;
@@ -461,6 +471,12 @@
           </select>
         </div>
 
+        <div class="type-tabs">
+          <button class="type-tab active" id="tabAll"      onclick="setTypeFilter('all')">전체</button>
+          <button class="type-tab"        id="tabCsv"      onclick="setTypeFilter('csv')">CSV</button>
+          <button class="type-tab realtime-tab" id="tabRealtime" onclick="setTypeFilter('realtime')">실시간</button>
+        </div>
+
         <div class="side-summary">
           <div>내 장비 목록</div>
           <div>표시 <span id="visibleDeviceCount">0</span></div>
@@ -614,6 +630,16 @@
     };
 
     let currentDeviceId = null;
+    let typeFilter = 'all';  // 'all' | 'csv' | 'realtime'
+
+    function setTypeFilter(type) {
+      typeFilter = type;
+      ['all','csv','realtime'].forEach(t => {
+        const tab = document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`);
+        if (tab) tab.classList.toggle('active', t === type);
+      });
+      renderDeviceList();
+    }
     let ws = null;
     let reconnectTimer = null;
     let reconnectAttempts = 0;
@@ -837,7 +863,8 @@
           (d.device_id||"").toLowerCase().includes(keyword) ||
           (d.source_file||"").toLowerCase().includes(keyword);
         const st = status === "ALL" || d.system_status === status;
-        return kw && st;
+        const tt = typeFilter === "all" || (d.device_type || "csv") === typeFilter;
+        return kw && st && tt;
       });
     }
 
@@ -905,8 +932,13 @@
           </div>
           <div class="device-footer">
             ${predBadge(predName)}
-            <div class="alert-mini ${d.alert_active ? "on" : ""}">
-              ${d.alert_active ? "⚠ ALERT ON" : "NORMAL"}
+            <div style="display:flex;align-items:center;gap:6px;">
+              ${(d.device_type||'csv')==='realtime'
+                ? '<span style="font-size:.7rem;padding:2px 7px;border-radius:999px;background:rgba(204,68,255,.15);color:#cc44ff;font-weight:800;">실시간</span>'
+                : '<span style="font-size:.7rem;padding:2px 7px;border-radius:999px;background:rgba(89,199,255,.1);color:var(--cyan);font-weight:800;">CSV</span>'}
+              <div class="alert-mini ${d.alert_active ? "on" : ""}">
+                ${d.alert_active ? "⚠ ALERT ON" : "NORMAL"}
+              </div>
             </div>
           </div>
           <div class="spark-wrap">
