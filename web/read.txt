@@ -1,2 +1,27 @@
 MQTT 통신 방식
 터미널 2 :  mosquitto -v, uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+
+FastAPI 서버: app.py
+로그인/인증
+장비 목록 조회
+CSV 재생 시작/중지
+WebSocket 실시간 전송
+MQTT publish
+관리자 API 제공
+
+인증 처리: auth.py
+JWT 토큰 발급
+비밀번호 해시
+현재 사용자 검증
+
+DB 구성: db.py, db_models.py
+SQLite 사용
+User, Device, Permission, SensorData 테이블 구성
+
+AI 추론 런타임: infer_runtime.py, models.py
+Hybrid GRU 모델 사용
+64 window 기반 센서 시퀀스 + 통계 feature 추론 구조
+
+프론트엔드
+index.html: 사용자 모니터링 대시보드
+admin.html: 관리자 콘솔
