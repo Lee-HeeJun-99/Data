@@ -1,35 +1,63 @@
-%% collect_csv_modes.m
+%% collect_csv_modes_v2.m
 clear; clc;
 
 %% ===== 사용자 설정 =====
 modelName = "main_model";
-stopTime = 10;
+stopTime = 100;
 numRunsPerMode = 10;
 saveFolder = fullfile(pwd, "dataset_out");
 modeBlockNameHint = "mode";
 
 % 수집할 mode
-% 현재 검출 기준:
-% Mode 0,1,2 = 비검출
-% Mode 3,4,7 = 검출
-modeList = [0 1 2 3 4 7];
+% Mode 0,1,2 = 비검출 / 약한 이상
+% Mode 3,4,7 = 아크 검출
+modeList = [0 1 2 3 4 5 6 7];
 
 %% ===== 저장 폴더 =====
 if ~exist(saveFolder, "dir")
     mkdir(saveFolder);
 end
 
+%% ===== 기본 seed를 base workspace에 먼저 생성 =====
+% Simulink 블록 파라미터에 sim_seed_xxx를 넣었을 때
+% 모델 컴파일 전 "변수 없음" 오류 방지용
+sim_seed    = 1234;
+sim_seed_hf = 2234;
+sim_seed_i  = 3234;
+sim_seed_t  = 4234;
+sim_seed_r  = 5234;
+
+assignin("base", "sim_seed", sim_seed);
+assignin("base", "sim_seed_hf", sim_seed_hf);
+assignin("base", "sim_seed_i", sim_seed_i);
+assignin("base", "sim_seed_t", sim_seed_t);
+assignin("base", "sim_seed_r", sim_seed_r);
+
+%% ===== 선택: 노이즈 강도 랜덤 스케일 기본값 =====
+% Simulink 블록의 Noise power 등을 아래 변수로 곱해서 쓰고 싶을 때 사용
+% 예: HF_SOURCE 잡음 전력 = 0.2 * hf_noise_scale
+% 예: I_meas 노이즈 전력 = 0.01 * i_noise_scale
+% 예: T_meas 노이즈 전력 = 0.001 * t_noise_scale
+% 예: R_noise 잡음 전력 = 1e-4 * r_noise_scale
+hf_noise_scale = 1.0;
+i_noise_scale  = 1.0;
+t_noise_scale  = 1.0;
+r_noise_scale  = 1.0;
+
+assignin("base", "hf_noise_scale", hf_noise_scale);
+assignin("base", "i_noise_scale", i_noise_scale);
+assignin("base", "t_noise_scale", t_noise_scale);
+assignin("base", "r_noise_scale", r_noise_scale);
+
 %% ===== 모델 로드 =====
 load_system(modelName);
 
-% 혹시 실행 중이면 정지
 try
     set_param(modelName, "SimulationCommand", "stop");
     pause(1);
 catch
 end
 
-% Fast Restart는 디버깅 단계에서는 끔
 try
     set_param(modelName, "FastRestart", "off");
 catch
@@ -49,13 +77,57 @@ for m = modeList
         % mode 설정
         set_param(modeBlk, "Value", num2str(m));
 
-        % 재현성용 시드
-        rng(1000*m + runIdx, "twister");
+        % =====================================================
+        % run마다 seed 변경
+        %
+        % Simulink 블록 설정 권장:
+        %   HF_SOURCE 고주파 노이즈 Seed = sim_seed_hf
+        %   SENSOR I_meas 노이즈 Seed    = sim_seed_i
+        %   SENSOR T_meas 노이즈 Seed    = sim_seed_t
+        %   ET R_noise 노이즈 Seed       = sim_seed_r
+        % =====================================================
+        sim_seed    = 100000 + 1000*m + runIdx;
+        sim_seed_hf = 200000 + 1000*m + runIdx;
+        sim_seed_i  = 300000 + 1000*m + runIdx;
+        sim_seed_t  = 400000 + 1000*m + runIdx;
+        sim_seed_r  = 500000 + 1000*m + runIdx;
 
-        % 혹시 실행 중이면 정지
+        assignin("base", "sim_seed", sim_seed);
+        assignin("base", "sim_seed_hf", sim_seed_hf);
+        assignin("base", "sim_seed_i", sim_seed_i);
+        assignin("base", "sim_seed_t", sim_seed_t);
+        assignin("base", "sim_seed_r", sim_seed_r);
+
+        rng(sim_seed, "twister");
+
+        % =====================================================
+        % 선택: run마다 노이즈 강도도 약간 랜덤화
+        % 너무 크게 흔들면 mode 간 특성이 무너질 수 있으므로 0.8~1.2 권장
+        % =====================================================
+        hf_noise_scale = 0.8 + 0.4*rand();
+        i_noise_scale  = 0.8 + 0.4*rand();
+        t_noise_scale  = 0.8 + 0.4*rand();
+        r_noise_scale  = 0.8 + 0.4*rand();
+
+        assignin("base", "hf_noise_scale", hf_noise_scale);
+        assignin("base", "i_noise_scale", i_noise_scale);
+        assignin("base", "t_noise_scale", t_noise_scale);
+        assignin("base", "r_noise_scale", r_noise_scale);
+
+        fprintf("[INFO] sim_seed    = %d\n", sim_seed);
+        fprintf("[INFO] sim_seed_hf = %d\n", sim_seed_hf);
+        fprintf("[INFO] sim_seed_i  = %d\n", sim_seed_i);
+        fprintf("[INFO] sim_seed_t  = %d\n", sim_seed_t);
+        fprintf("[INFO] sim_seed_r  = %d\n", sim_seed_r);
+
+        fprintf("[INFO] hf_noise_scale = %.4f\n", hf_noise_scale);
+        fprintf("[INFO] i_noise_scale  = %.4f\n", i_noise_scale);
+        fprintf("[INFO] t_noise_scale  = %.4f\n", t_noise_scale);
+        fprintf("[INFO] r_noise_scale  = %.4f\n", r_noise_scale);
+
         try
             set_param(modelName, "SimulationCommand", "stop");
-            pause(0.5);
+            pause(0.2);
         catch
         end
 
@@ -64,7 +136,6 @@ for m = modeList
             "StopTime", num2str(stopTime), ...
             "ReturnWorkspaceOutputs", "on");
 
-        % 디버그
         disp("[DEBUG] simOut contains:");
         disp(simOut.who)
 
@@ -88,15 +159,12 @@ for m = modeList
         T_data          = T_data(1:N);
         t_data          = t_data(1:N);
 
-        % boolean/logical이면 CSV 저장을 위해 double로 변환
         arc_flag_data   = double(arc_flag_data);
         arc_detect_data = double(arc_detect_data);
 
-        % mode 열
         mode_col = m * ones(N,1);
 
         % 최종 저장 데이터
-        % Mux 순서:
         % [I_meas, HF_energy, HF_rms, hf_norm, arc_flag, arc_detect, T_meas, mode]
         data = [
             I_data, ...
@@ -109,8 +177,8 @@ for m = modeList
             mode_col
         ];
 
-        % CSV 저장
         csvName = fullfile(saveFolder, sprintf("mode%d_run%02d.csv", m, runIdx));
+
         header = {
             'I_meas', ...
             'HF_energy', ...
@@ -131,7 +199,9 @@ end
 
 disp("모든 CSV 저장이 완료되었습니다.");
 
-%% ===== 로컬 함수 =====
+%% =========================================================
+% 로컬 함수
+%% =========================================================
 function blk = findModeBlock(modelName, hint)
     blks = find_system(modelName, ...
         "SearchDepth", 3, ...
@@ -172,25 +242,16 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
     names = simOut.who;
     ds = [];
 
-    % -------------------------------------------------
-    % 0) simOut 안에 dataset이 직접 있는 경우
-    % -------------------------------------------------
     if any(strcmp(names, "dataset"))
         ds = simOut.get("dataset");
         fprintf("[INFO] simOut의 dataset 사용\n");
     end
 
-    % -------------------------------------------------
-    % 1) simOut 안에 dataset_out이 직접 있는 경우
-    % -------------------------------------------------
     if isempty(ds) && any(strcmp(names, "dataset_out"))
         ds = simOut.get("dataset_out");
         fprintf("[INFO] simOut의 dataset_out 사용\n");
     end
 
-    % -------------------------------------------------
-    % 2) simOut 안에 out이 있고, out.dataset이 있는 경우
-    % -------------------------------------------------
     if isempty(ds) && any(strcmp(names, "out"))
         outVar = simOut.get("out");
         if isstruct(outVar) && isfield(outVar, "dataset")
@@ -205,9 +266,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
         end
     end
 
-    % -------------------------------------------------
-    % 3) base workspace의 out.dataset fallback
-    % -------------------------------------------------
     if isempty(ds) && evalin("base", "exist('out','var')")
         outVar = evalin("base", "out");
         if isstruct(outVar) && isfield(outVar, "dataset")
@@ -228,9 +286,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
 
     fprintf("[DEBUG] class(ds) = %s\n", class(ds));
 
-    % -------------------------------------------------
-    % Case 0) double / numeric 형태
-    % -------------------------------------------------
     if isnumeric(ds)
         fprintf("[DEBUG] numeric array detected\n");
         vals = squeeze(ds);
@@ -240,7 +295,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
             error("dataset이 numeric이긴 하지만 벡터입니다. 최소 7개 신호가 필요합니다.");
         end
 
-        % 보통 [N x 7] 또는 [7 x N]
         if size(vals, 2) >= 7
             I_data          = vals(:,1);
             HF_energy_data  = vals(:,2);
@@ -269,9 +323,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
         return;
     end
 
-    % -------------------------------------------------
-    % Case 1) Simulink.SimulationData.Dataset 객체
-    % -------------------------------------------------
     if isa(ds, "Simulink.SimulationData.Dataset")
         fprintf("[DEBUG] Dataset object detected\n");
         printDatasetNames(ds);
@@ -281,14 +332,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
             error("Dataset element 개수가 부족합니다. 현재 개수: %d, 필요 개수: 7", nElem);
         end
 
-        % Mux 입력 순서 기준
-        % 1: I_meas
-        % 2: HF_energy
-        % 3: HF_rms
-        % 4: hf_norm
-        % 5: arc_flag
-        % 6: arc_detect
-        % 7: T_meas
         I_data          = extractSignalData(ds{1}.Values);
         HF_energy_data  = extractSignalData(ds{2}.Values);
         HF_rms_data     = extractSignalData(ds{3}.Values);
@@ -305,13 +348,9 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
         return;
     end
 
-    % -------------------------------------------------
-    % Case 2) struct 형태
-    % -------------------------------------------------
     if isstruct(ds)
         fprintf("[DEBUG] struct detected\n");
 
-        % 2-1) ds.signals.values 형태
         if isfield(ds, "signals") && isfield(ds.signals, "values")
             vals = ds.signals.values;
             vals = squeeze(vals);
@@ -348,7 +387,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
             return;
         end
 
-        % 2-2) 구조체 필드별 저장 형태
         fields = fieldnames(ds);
         fprintf("[DEBUG] struct fields: %s\n", strjoin(fields, ", "));
 
@@ -370,9 +408,6 @@ function [I_data, HF_energy_data, HF_rms_data, hf_norm_data, ...
         return;
     end
 
-    % -------------------------------------------------
-    % Case 3) cell 형태
-    % -------------------------------------------------
     if iscell(ds)
         fprintf("[DEBUG] cell detected\n");
         if numel(ds) < 7
