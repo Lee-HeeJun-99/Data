@@ -1,0 +1,2 @@
+MQTT 통신 방식
+터미널 2 :  mosquitto -v, uvicorn app:app --host 0.0.0.0 --port 8000 --reload
