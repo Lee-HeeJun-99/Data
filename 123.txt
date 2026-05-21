@@ -1,0 +1,4 @@
+ggg9970@Lee-Jun:~ $ python3 test.py 
+RAW=   1 | V_now=0.003V | Bias=0.003V | Sensor_Vrms=0.0000V | Current=0.000A
+RAW=   1 | V_now=0.003V | Bias=0.003V | Sensor_Vrms=0.0000V | Current=0.000A
+RAW=   1 | V_now=0.003V | Bias=0.003V | Sensor_Vrms=0.0000V | Current=0.000A
